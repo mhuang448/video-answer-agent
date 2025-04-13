@@ -5,13 +5,14 @@ import random
 import uuid
 import boto3
 import json
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ReadTimeoutError
 from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
 
 # Import models, utils, and pipeline logic
 from .models import (
     QueryRequest, ProcessRequest, VideoInfo,
-    ProcessingStartedResponse, StatusResponse
+    ProcessingStartedResponse, StatusResponse, LikeResponse
 )
 from .utils import (
     CONFIG, determine_if_processed, get_s3_json_path, get_s3_interactions_path,
@@ -48,54 +49,68 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Helper function to list processed videos from S3
-def get_list_of_processed_video_ids():
+# Helper function to list processed video details from S3
+def get_processed_video_details() -> List[Dict[str, Any]]:
     """
-    Retrieve list of processed video IDs from S3 by scanning the video-data/ prefix 
-    and checking the processing_status in each video's JSON metadata file.
+    Retrieve list of video details (id, like_count, uploader_name) for videos
+    with processing_status 'FINISHED' from S3 metadata files.
     """
+    video_details = []
     try:
-        s3_client = boto3.client('s3', 
+        s3_client = boto3.client('s3',
                                 region_name=CONFIG['aws_region'],
                                 aws_access_key_id=CONFIG.get('aws_access_key_id'),
-                                aws_secret_access_key=CONFIG.get('aws_secret_access_key'))
-        
-        # List all objects with prefix video-data/
+                                aws_secret_access_key=CONFIG.get('aws_secret_access_key'),
+                                config=boto3.session.Config(read_timeout=10)) # Add timeout
+
         paginator = s3_client.get_paginator('list_objects_v2')
         pages = paginator.paginate(
             Bucket=CONFIG['s3_bucket_name'],
             Prefix='video-data/',
             Delimiter='/'
         )
-        
-        # Extract video IDs from common prefixes (folders)
-        video_ids = []
+
         for page in pages:
             if 'CommonPrefixes' in page:
                 for prefix in page['CommonPrefixes']:
-                    # Extract video_id from the prefix path
-                    prefix_path = prefix['Prefix']  # e.g., 'video-data/username-videoId/'
-                    video_id = prefix_path.strip('/').split('/')[-1]  # Get 'username-videoId'
-                    
-                    # Check if this video has a JSON file with FINISHED status
+                    prefix_path = prefix['Prefix']
+                    video_id = prefix_path.strip('/').split('/')[-1]
                     json_key = f"video-data/{video_id}/{video_id}.json"
+
                     try:
                         response = s3_client.get_object(
                             Bucket=CONFIG['s3_bucket_name'],
                             Key=json_key
                         )
                         metadata = json.loads(response['Body'].read().decode('utf-8'))
-                        
-                        # Only include videos with FINISHED processing status
+
                         if metadata.get('processing_status') == "FINISHED":
-                            video_ids.append(video_id)
+                            details = {
+                                "video_id": video_id,
+                                "like_count": metadata.get('like_count', random.randint(50000, 5000000)), # Default to random number between 50k and 5M
+                                "uploader_name": metadata.get('uploader_name') # Can be None
+                            }
+                            video_details.append(details)
                     except ClientError as e:
-                        print(f"Error reading JSON for {video_id}: {e}")
+                        # Log error reading specific JSON but continue
+                        if e.response['Error']['Code'] == 'NoSuchKey':
+                             print(f"Metadata JSON not found for {video_id}, skipping.")
+                        else:
+                             print(f"Error reading JSON for {video_id}: {e}")
                         continue
-        
-        return video_ids
+                    except ReadTimeoutError:
+                         print(f"Read timed out for {video_id} JSON, skipping.")
+                         continue
+                    except json.JSONDecodeError:
+                         print(f"Error decoding JSON for {video_id}, skipping.")
+                         continue
+
+        return video_details
+    except (ClientError, ReadTimeoutError) as e:
+        print(f"Error listing or accessing S3 prefixes: {e}")
+        return [] # Return empty list on broader S3 access errors
     except Exception as e:
-        print(f"Error listing processed videos: {e}")
+        print(f"Unexpected error listing processed videos: {e}")
         return []
 
 
@@ -109,36 +124,48 @@ async def read_root():
 
 @app.get("/api/videos/foryou", response_model=list[VideoInfo], tags=["Videos"])
 async def get_for_you_videos():
-    """Returns a list of 3 random pre-processed video IDs and their public S3 URLs."""
+    """Returns a list of up to 3 random pre-processed videos with details."""
     try:
-        # Get videos with FINISHED processing status
-        all_processed_ids = get_list_of_processed_video_ids()
-        if not all_processed_ids:
+        all_processed_details = get_processed_video_details()
+        if not all_processed_details:
+            print("No processed video details found.")
             return []
 
-        # Get a random sample of up to 3 videos
-        sample_size = min(len(all_processed_ids), 3)
-        selected_ids = random.sample(all_processed_ids, sample_size)
+        sample_size = min(len(all_processed_details), 3)
+        selected_details = random.sample(all_processed_details, sample_size)
+
+        print(f"Selected video IDs: {[details['video_id'] for details in selected_details]}")
 
         s3_bucket = CONFIG["s3_bucket_name"]
         aws_region = CONFIG["aws_region"]
-        
-        videos = []
-        for video_id in selected_ids:
-            # Construct direct public S3 URL (since bucket policy allows public read for MP4s)
-            video_url = f"https://{s3_bucket}.s3.{aws_region}.amazonaws.com/video-data/{video_id}/{video_id}.mp4"
-            videos.append(VideoInfo(video_id=video_id, video_url=video_url))
 
+        videos = []
+        for details in selected_details:
+            video_id = details["video_id"]
+            like_count = details["like_count"]
+            if not like_count:
+                like_count = random.randint(50000, 5000000)
+            video_url = f"https://{s3_bucket}.s3.{aws_region}.amazonaws.com/video-data/{video_id}/{video_id}.mp4"
+            videos.append(VideoInfo(
+                video_id=video_id,
+                video_url=video_url,
+                like_count=like_count,
+                uploader_name=details["uploader_name"]
+            ))
+
+        print(f"Returning {len(videos)} videos for For You feed.")
         return videos
     except Exception as e:
         print(f"Error in /api/videos/foryou: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve videos.")
+        # Avoid raising HTTPException here to prevent frontend errors if S3 is slow/unavailable
+        # Instead, return an empty list, frontend should handle this gracefully.
+        return []
 
 
 @app.post("/api/query/async", response_model=ProcessingStartedResponse, status_code=202, tags=["Query"])
 async def query_processed_video(query: QueryRequest, background_tasks: BackgroundTasks):
-    """Triggers async query processing for a processed video."""
-    print(f"Received query for processed video {query.video_id}: {query.user_query}")
+    """Triggers async query processing for a processed video, including username."""
+    print(f"Received query for processed video {query.video_id} by user '{query.user_name}': {query.user_query}") # Log username
 
     interaction_id = str(uuid.uuid4())
     query_timestamp = datetime.now(timezone.utc).isoformat()
@@ -146,23 +173,30 @@ async def query_processed_video(query: QueryRequest, background_tasks: Backgroun
     s3_interactions_path = get_s3_interactions_path(query.video_id)
     s3_bucket = CONFIG["s3_bucket_name"]
 
-    # Create the interaction data structure
+    # Create the interaction data structure including username
+    # IMPORTANT: Ensure this structure matches the Interaction Pydantic model
     interaction = {
         "interaction_id": interaction_id,
+        "user_name": query.user_name, # Added username
         "user_query": query.user_query,
         "query_timestamp": query_timestamp,
-        "status": "processing"
+        "status": "processing",
+        "ai_answer": None, # Initialize optional fields
+        "answer_timestamp": None
     }
 
+    # Add the task to run in the background
+    # NOTE: run_query_pipeline_async MUST be updated to accept user_name
     background_tasks.add_task(
         run_query_pipeline_async,
-        query.video_id,
-        query.user_query,
-        interaction_id,
-        query_timestamp,
-        s3_json_path,
-        s3_interactions_path,
-        s3_bucket
+        video_id=query.video_id,
+        user_query=query.user_query,
+        user_name=query.user_name, # Pass username
+        interaction_id=interaction_id,
+        s3_json_path=s3_json_path,
+        s3_interactions_path=s3_interactions_path,
+        s3_bucket=s3_bucket,
+        interaction_data=interaction # Pass the whole initial dict
     )
 
     return ProcessingStartedResponse(
@@ -174,8 +208,8 @@ async def query_processed_video(query: QueryRequest, background_tasks: Backgroun
 
 @app.post("/api/process_and_query/async", response_model=ProcessingStartedResponse, status_code=202, tags=["Query"])
 async def process_new_video_and_query(process_req: ProcessRequest, background_tasks: BackgroundTasks):
-    """Triggers async FULL pipeline (download to answer) for a NEW video URL."""
-    print(f"Received request for new video {process_req.video_url} with query: {process_req.user_query}")
+    """Triggers async FULL pipeline for a NEW video URL, including user/uploader names."""
+    print(f"Received request for new video {process_req.video_url} by user '{process_req.user_name}' with query: {process_req.user_query}") # Log username
 
     video_id = generate_unique_video_id(process_req.video_url)
     interaction_id = str(uuid.uuid4())
@@ -186,25 +220,32 @@ async def process_new_video_and_query(process_req: ProcessRequest, background_ta
     s3_video_base_path = get_s3_video_base_path(video_id)
     s3_bucket = CONFIG["s3_bucket_name"]
 
-    # Create the interaction data structure
+    # Create the interaction data structure including username
+    # IMPORTANT: Ensure this structure matches the Interaction Pydantic model
     interaction = {
         "interaction_id": interaction_id,
+        "user_name": process_req.user_name, # Added username
         "user_query": process_req.user_query,
         "query_timestamp": query_timestamp,
-        "status": "processing"
+        "status": "processing", # Will be updated by the pipeline
+        "ai_answer": None,
+        "answer_timestamp": None
     }
 
+    # Add the task to run in the background
+    # NOTE: run_full_pipeline_async MUST be updated to accept user_name, uploader_name, and interaction
     background_tasks.add_task(
         run_full_pipeline_async,
-        process_req.video_url,
-        process_req.user_query,
-        video_id,
-        s3_video_base_path,
-        s3_json_path,
-        s3_interactions_path,
-        s3_bucket,
-        interaction_id,
-        query_timestamp
+        video_url=process_req.video_url,
+        user_query=process_req.user_query, 
+        user_name=process_req.user_name,           # Pass username
+        uploader_name=process_req.uploader_name,   # Pass uploader name
+        video_id=video_id,
+        s3_video_base_path=s3_video_base_path,
+        s3_json_path=s3_json_path,
+        s3_interactions_path=s3_interactions_path,
+        s3_bucket=s3_bucket,
+        interaction_data=interaction # Pass the whole dict
     )
 
     return ProcessingStartedResponse(
@@ -216,40 +257,132 @@ async def process_new_video_and_query(process_req: ProcessRequest, background_ta
 
 @app.get("/api/query/status/{video_id}", response_model=StatusResponse, tags=["Query"])
 async def get_query_status(video_id: str):
-    """Pollable endpoint to check status and get all interactions from S3 JSON."""
+    """Pollable endpoint to check video status and get all interactions."""
     print(f"Checking status for video_id: {video_id}")
     s3_bucket = CONFIG["s3_bucket_name"]
-
-    # Get paths for both files
+    aws_region = CONFIG["aws_region"]
     s3_json_path = get_s3_json_path(video_id)
     s3_interactions_path = get_s3_interactions_path(video_id)
-    
-    try:
-        # Get video metadata for processing_status
-        video_metadata = get_processing_status_from_s3(s3_bucket, s3_json_path)
-        processing_status = video_metadata.get("processing_status")
-        
-        # Get interactions (may not exist yet)
-        try:
-            interactions = get_interactions_from_s3(s3_bucket, s3_interactions_path)
-        except Exception as e:
-            print(f"Note: Could not retrieve interactions (might not exist yet): {e}")
-            interactions = []
-        
-        # Ensure response matches the Pydantic model
-        return StatusResponse(
-            video_id=video_id,
-            processing_status=processing_status,
-            interactions=interactions
-        )
-    except FileNotFoundError:
-        print(f"Metadata file not found for {video_id} at {s3_json_path}")
-        raise HTTPException(status_code=404, detail=f"Status not available for video {video_id}. Processing may not have started or completed initial steps.")
-    except Exception as e:
-        print(f"Error getting status for {video_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve status.")
 
-# --- Optional: Run directly for local testing (though `uvicorn main:app --reload` is better) ---
+    video_metadata: Optional[Dict[str, Any]] = None
+    interactions: List[Dict[str, Any]] = []
+    processing_status: Optional[str] = None
+    like_count: Optional[int] = None
+    uploader_name: Optional[str] = None
+    video_url: Optional[str] = None
+
+    # --- Get Video Metadata ---
+    try:
+        video_metadata = get_video_metadata_from_s3(s3_bucket, s3_json_path)
+        processing_status = video_metadata.get("processing_status")
+        like_count = video_metadata.get("like_count", 0) # Default to 0
+        uploader_name = video_metadata.get("uploader_name")
+        # Construct public URL only if metadata is successfully retrieved
+        video_url = f"https://{s3_bucket}.s3.{aws_region}.amazonaws.com/video-data/{video_id}/{video_id}.mp4"
+        print(f"Retrieved metadata for {video_id}: status={processing_status}, likes={like_count}")
+
+    except FileNotFoundError:
+        # Metadata doesn't exist (yet or failed very early). This is common for new submissions.
+        print(f"Metadata file not found for {video_id} at {s3_json_path}. Assuming 'processing' or not yet started.")
+        # We might still want to check for interactions if the metadata write failed but interactions started
+        processing_status = "PROCESSING" # Or UNKNOWN? Let's assume processing until proven otherwise
+    except Exception as e:
+        # Handle other errors fetching metadata (permissions, S3 issues)
+        print(f"Error getting video metadata for {video_id}: {e}")
+        # Don't raise 500, let the frontend handle potentially incomplete data
+        processing_status = "ERROR_FETCHING_METADATA"
+
+
+    # --- Get Interactions ---
+    try:
+        # Only attempt to get interactions if metadata retrieval didn't raise FileNotFoundError immediately,
+        # or even if it did, maybe interactions exist. Let's always try.
+        interactions = get_interactions_from_s3(s3_bucket, s3_interactions_path)
+        print(f"Retrieved {len(interactions)} interactions for {video_id}")
+    except FileNotFoundError:
+         # It's normal for interactions file not to exist initially.
+        print(f"Interactions file not found for {video_id} at {s3_interactions_path}. Returning empty list.")
+        interactions = []
+    except Exception as e:
+        print(f"Error getting interactions for {video_id}: {e}")
+        # Return empty interactions but don't fail the whole request
+        interactions = [] # Ensure it's an empty list on error
+
+
+    # --- Construct and Return Response ---
+    # Use the StatusResponse model structure
+    return StatusResponse(
+        processing_status=processing_status,
+        video_url=video_url, # Will be None if metadata wasn't fetched
+        like_count=like_count, # Will be None if metadata wasn't fetched
+        uploader_name=uploader_name, # Will be None if metadata wasn't fetched
+        interactions=interactions # Will be empty list if not found or error
+    )
+
+
+# --- NEW Like Endpoint ---
+@app.post("/api/videos/{video_id}/like", response_model=LikeResponse, tags=["Videos"])
+async def like_video(video_id: str):
+    """Increments the like count for a video in its S3 metadata JSON."""
+    print(f"Received like request for video_id: {video_id}")
+    s3_bucket = CONFIG["s3_bucket_name"]
+    s3_json_path = get_s3_json_path(video_id)
+    s3_client = boto3.client('s3',
+                             region_name=CONFIG['aws_region'],
+                             aws_access_key_id=CONFIG.get('aws_access_key_id'),
+                             aws_secret_access_key=CONFIG.get('aws_secret_access_key'))
+
+    try:
+        # --- Get current metadata ---
+        try:
+            response = s3_client.get_object(Bucket=s3_bucket, Key=s3_json_path)
+            metadata = json.loads(response['Body'].read().decode('utf-8'))
+            print(f"Current metadata fetched for {video_id}")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                print(f"Metadata file not found for liking {video_id} at {s3_json_path}")
+                raise HTTPException(status_code=404, detail=f"Video metadata not found for {video_id}. Cannot like.")
+            else:
+                print(f"S3 ClientError getting metadata for like: {e}")
+                raise HTTPException(status_code=500, detail="Failed to retrieve video metadata before liking.")
+        except json.JSONDecodeError:
+             print(f"Failed to decode metadata JSON for {video_id} before liking.")
+             raise HTTPException(status_code=500, detail="Failed to parse video metadata.")
+
+        # --- Increment like count ---
+        current_likes = metadata.get('like_count', 0)
+        # Ensure it's an integer, handle potential non-int values gracefully
+        if not isinstance(current_likes, int):
+            current_likes = 0
+        metadata['like_count'] = current_likes + 1
+        new_likes = metadata['like_count']
+        print(f"Incremented likes for {video_id} to {new_likes}")
+
+        # --- Write updated metadata back to S3 ---
+        # WARNING: This has a potential race condition if multiple users like simultaneously.
+        # For a demo, this is acceptable. Production needs atomic updates (e.g., DynamoDB).
+        try:
+             s3_client.put_object(
+                 Bucket=s3_bucket,
+                 Key=s3_json_path,
+                 Body=json.dumps(metadata, indent=2), # Pretty print for readability
+                 ContentType='application/json'
+             )
+             print(f"Successfully updated metadata for {video_id} with new like count.")
+        except ClientError as e:
+            print(f"S3 ClientError putting updated metadata for like: {e}")
+            # Don't revert the in-memory count, just report failure
+            raise HTTPException(status_code=500, detail="Failed to save updated like count.")
+
+        return LikeResponse(like_count=new_likes)
+
+    except Exception as e:
+        # Catch-all for unexpected errors during the like process
+        print(f"Unexpected error liking video {video_id}: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while processing the like.")
+
+
+# --- Optional: Run directly (uvicorn recommended) ---
 # if __name__ == "__main__":
 #     import uvicorn
 #     uvicorn.run(app, host="0.0.0.0", port=8000)

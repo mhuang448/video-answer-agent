@@ -37,7 +37,7 @@ This system operates via two primary workflows: preparing video content and answ
 
 ## Core Features
 
-- **Interactive Video Feed:** Scrollable feed displaying **pre-processed** videos ready for Q&A.
+- **Interactive Video Feed:** Scrollable feed displaying **pre-processed** videos ready for Q&A. The main viewable page will containt consist of the current video played, a like button (displaying number of likes), and a comment button (for user to comment). There will also be a notification bell in the top right. Users can scroll down to see a new video. On that video they can scroll down to see another video. THAT IS ALL THERE IS to the UI. DO NOT OVERCOMPLICATE UI. We are prioritizing rapid development and demo-ing the cool AskAI feature.
 - **`@AskAI` Feature:** Asynchronous Q&A on feed videos via comment tag (`@AskAI`), leveraging RAG + MCP for answers.
 - **New Video Processing & Querying:** Dedicated interface to submit a new video URL and an initial question, triggering the _full_ processing pipeline (Steps 1 & 2 above).
 - **Notification System:** A bell icon in the UI indicates new answers are ready with a count of unread responses.

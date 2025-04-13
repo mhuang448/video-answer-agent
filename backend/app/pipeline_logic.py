@@ -823,20 +823,26 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 
 # --- Background Task Implementations --- (Updated)
 
-async def run_query_pipeline_async(video_id: str, user_query: str, interaction_id: str, query_timestamp: str, s3_json_path: str, s3_interactions_path: str, s3_bucket: str):
+async def run_query_pipeline_async(
+    video_id: str,
+    user_query: str,
+    user_name: str, # ADDED argument
+    interaction_id: str,
+    s3_json_path: str,
+    s3_interactions_path: str,
+    s3_bucket: str,
+    interaction_data: Dict[str, Any] # ADDED argument
+):
     """Background task to answer a query for a PROCESSED video."""
-    print(f"BACKGROUND TASK: Starting query pipeline for interaction {interaction_id} on video {video_id}")
+    # Note: user_name and query_timestamp are already in initial_interaction_data
+    print(f"BACKGROUND TASK: Starting query pipeline for interaction {interaction_data.get('interaction_id')} by user '{user_name}' on video {video_id}")
     start_time = time.time()
 
     try:
-        # 1. Add interaction with "processing" status
-        interaction = {
-            "interaction_id": interaction_id,
-            "user_query": user_query,
-            "query_timestamp": query_timestamp,
-            "status": "processing"
-        }
-        add_interaction_to_s3(s3_bucket, s3_interactions_path, interaction)
+        # 1. Add interaction using the provided data structure
+        # This dictionary already has user_name, query, timestamps, and status='processing'
+        add_interaction_to_s3(s3_bucket, s3_interactions_path, interaction_data)
+        print(f"Added initial interaction record: {interaction_data}")
 
         # 2. Load full video metadata
         video_metadata = get_video_metadata_from_s3(s3_bucket, s3_json_path)
@@ -847,22 +853,20 @@ async def run_query_pipeline_async(video_id: str, user_query: str, interaction_i
         print(f"===============\nRETRIEVED {len(retrieved_chunks)} CHUNKS\n===============")
 
         # 4. Assemble context (This now includes summary, themes, clips)
-        # Prepend the original user query for clarity in the combined context
         video_context = _assemble_video_context(retrieved_chunks, video_metadata)
         intermediate_prompt = _assemble_intermediate_prompt(video_context, user_query)
         print(f"===============\nINTERMEDIATE PROMPT:\n{intermediate_prompt[:500]}...\n===============")
-        
+
         # 5. Call MCP tool (using the assembled context + query)
-        # Decide here whether to use LLM selection or rule-based
-        # Keep the default (use_llm_selection=True in _call_mcp)
         print("DEBUG: Calling _call_mcp function...")
+        # Use LLM selection by default as set in _call_mcp signature
         mcp_result = await _call_mcp(intermediate_prompt, use_llm_selection=True)
         print(f"===============\nMCP TOOL RESULT:\n{mcp_result}\n===============")
-        
+
         # 6. Synthesize final answer (using the original context, MCP result, and query)
         final_answer = _synthesize_answer(user_query, video_context, mcp_result)
         print(f"===============\nFINAL ANSWER:\n{final_answer}\n===============")
-        
+
         # 7. Update status to completed with the answer
         update_interaction_status_in_s3(
             s3_bucket, s3_interactions_path, interaction_id, "completed",
@@ -885,19 +889,34 @@ async def run_query_pipeline_async(video_id: str, user_query: str, interaction_i
         print(f"BACKGROUND TASK: Query pipeline for interaction {interaction_id} finished in {end_time - start_time:.2f} seconds.")
 
 
-async def run_full_pipeline_async(video_url: str, user_query: str, video_id: str, s3_video_base_path: str, s3_json_path: str, s3_interactions_path: str, s3_bucket: str, interaction_id: str, query_timestamp: str):
+async def run_full_pipeline_async(
+    video_url: str,
+    user_query: str, # Changed from initial_user_query to match main.py call
+    user_name: str, # ADDED argument
+    uploader_name: Optional[str], # ADDED argument
+    video_id: str,
+    s3_video_base_path: str,
+    s3_json_path: str,
+    s3_interactions_path: str,
+    s3_bucket: str,
+    interaction_data: Dict[str, Any] # ADDED argument
+):
     """Background task to process a NEW video and then answer a query."""
-    print(f"BACKGROUND TASK: Starting full pipeline for {video_id} with interaction {interaction_id}")
+    interaction_id = interaction_data.get('interaction_id') # Get ID from passed data
+    print(f"BACKGROUND TASK: Starting full pipeline for video {video_id} (uploader: {uploader_name}) by user '{user_name}' with interaction {interaction_id}")
     start_time = time.time()
     full_video_metadata = None
 
     try:
-        # 1. Create initial metadata file
+        # 1. Create initial metadata file with uploader and zero likes
         initial_metadata = {
             "video_id": video_id,
             "source_url": video_url,
+            "uploader_name": uploader_name, # ADDED
+            "like_count": 0, # ADDED - Initialize likes to 0
             "processing_status": "PROCESSING",
             "processing_start_time": datetime.now(timezone.utc).isoformat()
+            # TODO: Consider extracting actual like count during download if possible
         }
         S3_CLIENT.put_object(
             Bucket=s3_bucket,
@@ -905,20 +924,17 @@ async def run_full_pipeline_async(video_url: str, user_query: str, video_id: str
             Body=json.dumps(initial_metadata, indent=2),
             ContentType='application/json'
         )
-        print(f"Created initial metadata at s3://{s3_bucket}/{s3_json_path}")
-        
-        # 2. Add initial interaction
-        interaction = {
-            "interaction_id": interaction_id,
-            "user_query": user_query,
-            "query_timestamp": query_timestamp,
-            "status": "processing"
-        }
-        add_interaction_to_s3(s3_bucket, s3_interactions_path, interaction)
+        print(f"Created initial metadata at s3://{s3_bucket}/{s3_json_path} with uploader '{uploader_name}'")
+
+        # 2. Add initial interaction using the provided data structure
+        # This includes user_name, query, timestamp, status='processing'
+        add_interaction_to_s3(s3_bucket, s3_interactions_path, interaction_data)
+        print(f"Added initial interaction record: {interaction_data}")
 
         # --- Video Processing Steps ---
         print("DEBUG: Starting video processing steps...")
-        local_video_path = _download_video(video_url, f"/tmp/{video_id}.mp4") # TODO: Handle /tmp path robustly
+        # TODO: Handle /tmp path more robustly (e.g., use tempfile module)
+        local_video_path = _download_video(video_url, f"/tmp/{video_id}.mp4")
         _upload_to_s3(local_video_path, s3_bucket, f"{s3_video_base_path}.mp4")
         chunks_metadata = _chunk_video(f"{s3_video_base_path}.mp4", s3_bucket)
         chunks_with_captions, overall_summary, key_themes = _generate_captions_and_summary(
@@ -929,15 +945,18 @@ async def run_full_pipeline_async(video_url: str, user_query: str, video_id: str
 
         # --- Finalize Metadata ---
         # This is the complete metadata after processing
+        # Re-include uploader_name and like_count for completeness
         full_video_metadata = {
             "video_id": video_id,
             "source_url": video_url,
+            "uploader_name": uploader_name, # Included again
+            "like_count": 0, # Included again (still 0 unless updated elsewhere)
             "processing_status": "FINISHED", # Mark as finished *before* query handling
             "processing_complete_time": datetime.now(timezone.utc).isoformat(),
             "overall_summary": overall_summary,
             "key_themes": key_themes,
             "chunks": chunks_with_captions,
-            # TODO: Consider adding total_duration and num_chunks here if available from chunking step
+            # TODO: Add total_duration and num_chunks if available
         }
         S3_CLIENT.put_object(
             Bucket=s3_bucket,
@@ -947,25 +966,26 @@ async def run_full_pipeline_async(video_url: str, user_query: str, video_id: str
         )
         print(f"Updated metadata with status FINISHED at s3://{s3_bucket}/{s3_json_path}")
 
-        # --- Handle the Query --- 
+        # --- Handle the Query ---
         print("DEBUG: Starting query handling...")
         # Retrieve relevant chunks
         retrieved_chunks = _retrieve_relevant_chunks(video_id, user_query)
-        
+
         # Assemble video context and intermediate prompt
         video_context = _assemble_video_context(retrieved_chunks, full_video_metadata)
         intermediate_prompt = _assemble_intermediate_prompt(video_context, user_query)
         print(f"Generated intermediate prompt (length: {len(intermediate_prompt)} chars)")
-        
-        # Call MCP (using default rule-based selection for now)
+
+        # Call MCP
         print("DEBUG: Calling _call_mcp function...")
-        mcp_result = await _call_mcp(intermediate_prompt, use_llm_selection=False) # Force rule-based for now
+        # Use LLM selection by default
+        mcp_result = await _call_mcp(intermediate_prompt, use_llm_selection=True)
         print(f"Received MCP result (length: {len(mcp_result)} chars)")
-        
+
         # Synthesize answer
         final_answer = _synthesize_answer(user_query, video_context, mcp_result)
         print(f"Synthesized final answer (length: {len(final_answer)} chars)")
-        
+
         # Update interaction status to completed
         update_interaction_status_in_s3(
             s3_bucket, s3_interactions_path, interaction_id, "completed",
@@ -979,11 +999,8 @@ async def run_full_pipeline_async(video_url: str, user_query: str, video_id: str
         import traceback
         traceback.print_exc() # Print full traceback for debugging
         try:
-            # Mark as failed in both files if possible
-            if full_video_metadata: # Check if metadata was created before failing
-                update_overall_processing_status(s3_bucket, s3_json_path, "FAILED")
-            else:
-                print("Skipping overall status update to FAILED as initial metadata might not exist.")
+            # Mark overall status as failed if metadata file likely exists
+            update_overall_processing_status(s3_bucket, s3_json_path, "FAILED")
             # Always try to update interaction status
             update_interaction_status_in_s3(s3_bucket, s3_interactions_path, interaction_id, "failed")
         except Exception as update_e:

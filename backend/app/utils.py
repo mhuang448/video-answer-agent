@@ -1,5 +1,6 @@
 # app/utils.py
 import os
+import random
 import re
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
@@ -351,3 +352,28 @@ def determine_if_processed(video_name: str) -> bool:
     # For PoC, we assume this is a newly processed video (not processed)
     # You could implement actual logic here if needed
     return False
+
+def generate_username():
+    adjectives = [
+        "Happy", "Brave", "Calm", "Clever", "Gentle",
+        "Bold", "Quick", "Wise", "Lucky", "Mighty",
+        "Cheerful", "Fierce", "Nimble", "Daring", "Sincere",
+        "Vibrant", "Silent", "Playful", "Radiant", "Zesty",
+        "Epic", "Jolly", "Merry", "Sassy", "Sunny"
+    ]
+    
+    animals = [
+        "Lion", "Tiger", "Bear", "Wolf", "Fox",
+        "Eagle", "Hawk", "Shark", "Panther", "Leopard",
+        "Falcon", "Otter", "Rabbit", "Koala", "Panda",
+        "Dolphin", "Penguin", "Giraffe", "Cheetah", "Bison",
+        "Hedgehog", "Squirrel", "Monkey", "Zebra", "Crocodile"
+    ]
+    
+    # Randomly choose an adjective and an animal from the lists
+    selected_adjective = random.choice(adjectives)
+    selected_animal = random.choice(animals)
+    
+    # Combine the selections with an underscore
+    username = f"{selected_adjective}_{selected_animal}"
+    return username
