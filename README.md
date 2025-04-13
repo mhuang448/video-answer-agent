@@ -18,19 +18,20 @@ It demonstrates a modern **agentic AI workflow** that leverages **Retrieval-Augm
 
 This system operates via two primary workflows: preparing video content and answering questions about it.
 
-**1. Background: Video Processing & Knowledge Base Creation (Pre-computation)**
+**1. Video Processing & Knowledge Base Creation (Pre-computation)**
 
-- _This process happens **before** a video appears on the main feed._
+- _This process happens **before** a video appears on the main feed. Scripts to accomplish this are in the /backend/technical_pipeline_scripts folder_
 - **Acquisition & Chunking:** Downloads video from URL, splits video into chunks intelligently (scene detection with PySceneDetect with fallback to fixed duration chunking), and stores important metadata about the video and chunks (timestamps, duration, chunk number, etc).
 - **Generating Chunk Captions and Overall Summary:** Generates detailed captions for each video chunk (using Gemini 2.5 Pro), then uses captions to query OpenAI to generate overall summary and extract key themes.
 - **Indexing for Retrieval:** Creates vector embeddings with OpenAI's `text-embedding-ada-002` from captions and indexes them in Pinecone along with relevant metadata, building a searchable knowledge base specific to the video.
+- **Upload to S3:** Video data (.mp4 file for full video, .mp4 files for video chunks, <video_id>.json files with generated chunk captions, overall video summary, key themes, and key metadata about video/chunks) are uploaded into our S3 bucket. This S3 data, along with our Pinecone index, forms our knowledge base for retrieval augmented generation (RAG).
 
 **2. Real-time: Answering a Query (`@AskAI` on the Feed)**
 
 - _This is triggered when a user tags `@AskAI` on a video from the main feed (which is already processed)._
 - **Query Understanding:** Embeds the user's question.
-- **Retrieval (RAG):** Queries Pinecone for the most relevant video caption segments based on the question.
-- **Context Assembly:** Builds context using the query, video summary/themes, and retrieved captions.
+- **Retrieval (RAG):** Queries Pinecone to find the video captions that are most semantically similar to the user query. Extracts video summary and key themes from our <video_id>.json file in S3.
+- **Context Assembly:** Builds relevant video context using the query, video summary/themes, and retrieved captions.
 - **Tool Selection & Use (Claude + MCP):** We initialize an MCP Client and an orchestrator (Claude) selects the best tool available from our Perplexity MCP Server (`perplexity_ask` or `perplexity_reason`), and synthesizes arguments to feed the tool based on our assembled context from the previous step. Then we call the tool with our MCP connection, getting an answer from the Perplexity MCP Server that is grounded in high quality internet search results.
 - **Synthesis:** An LLM (`gpt-4o-mini`) generates the final answer using the query, RAG context, and MCP results.
 - **Asynchronous Delivery:** The answer is generated in the background and delivered via notification.

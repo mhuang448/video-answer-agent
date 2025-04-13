@@ -10,4 +10,6 @@ video_ids.txt
 
 node_modules/
 
+LONG_README.md
+
 dist/
