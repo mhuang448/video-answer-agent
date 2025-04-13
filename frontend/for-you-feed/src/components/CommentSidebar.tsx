@@ -66,6 +66,12 @@ const LoadingSpinner = () => (
   </svg>
 );
 
+// --- Helper Function for Text Cleaning ---
+const cleanAiResponse = (text: string): string => {
+  // Remove asterisks and hashtags
+  return text.replace(/[*#]/g, "");
+};
+
 const CommentSidebar: React.FC<CommentSidebarProps> = ({
   isOpen,
   onClose,
@@ -391,7 +397,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
               {combinedInteractions.map((interaction) => (
                 <li
                   key={interaction.interaction_id}
-                  className="px-3 py-3 rounded-lg hover:bg-gray-900/30 transition-colors duration-150"
+                  className="px-3 py-3 rounded-lg hover:bg-gray-800/50 transition-colors duration-150"
                 >
                   {/* User Query Part */}
                   <div className="flex items-start space-x-3 mb-2">
@@ -415,7 +421,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
                           )}
                         </p>
                       </div>
-                      <p className="text-sm text-white">
+                      <p className="text-base text-white">
                         <span className="font-medium text-blue-400">
                           @AskAI
                         </span>{" "}
@@ -431,47 +437,45 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
                         <LoadingSpinner /> AskAI is thinking...
                       </div>
                     )}
-                    {interaction.status === "failed" && (
-                      <div className="text-xs text-red-400 bg-red-900/30 px-3 py-2 rounded border border-red-800">
-                        <p className="font-semibold mb-1">AskAI failed:</p>
-                        <p className="text-red-300 break-words">
-                          {interaction.ai_answer ||
-                            "An unknown error occurred."}
-                        </p>
-                      </div>
-                    )}
-                    {interaction.status === "completed" &&
-                      interaction.ai_answer && (
-                        <div className="flex items-start space-x-3 p-3 rounded-md bg-gradient-to-br from-gray-800/50 to-gray-900/60 border border-gray-700/50 shadow-sm">
-                          <div className="w-8 h-8 rounded-full bg-teal-600 flex-shrink-0 flex items-center justify-center text-white font-semibold text-sm">
-                            AI
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-semibold text-teal-300">
-                                AskAI
+                    {(interaction.status === "completed" ||
+                      interaction.status === "failed") && (
+                      <div className="flex items-start space-x-4 p-3 rounded-md bg-gradient-to-br from-gray-800/50 to-gray-900/60 border border-gray-700/50 shadow-sm">
+                        <div className="w-8 h-8 rounded-full bg-teal-600 flex-shrink-0 flex items-center justify-center text-white font-semibold text-sm">
+                          AI
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-sm font-semibold text-teal-300">
+                              AskAI
+                            </p>
+                            {(interaction.status === "completed" &&
+                              interaction.answer_timestamp) ||
+                            interaction.query_timestamp ? (
+                              <p
+                                className="text-xs text-gray-500"
+                                title={new Date(
+                                  interaction.answer_timestamp ||
+                                    interaction.query_timestamp
+                                ).toLocaleString()}
+                              >
+                                {formatDistanceToNow(
+                                  new Date(
+                                    interaction.answer_timestamp ||
+                                      interaction.query_timestamp
+                                  ),
+                                  { addSuffix: true }
+                                )}
                               </p>
-                              {interaction.answer_timestamp && (
-                                <p
-                                  className="text-xs text-gray-500"
-                                  title={new Date(
-                                    interaction.answer_timestamp
-                                  ).toLocaleString()}
-                                >
-                                  {formatDistanceToNow(
-                                    new Date(interaction.answer_timestamp),
-                                    { addSuffix: true }
-                                  )}
-                                </p>
-                              )}
-                            </div>
-                            {/* Render AI answer with basic formatting for newlines */}
-                            <div className="text-sm text-gray-200 whitespace-pre-wrap break-words">
-                              {interaction.ai_answer}
-                            </div>
+                            ) : null}
+                          </div>
+                          <div className="text-base text-gray-200 whitespace-pre-wrap break-words">
+                            {interaction.status === "failed"
+                              ? "Sorry, I'm having trouble with that question. Please try again."
+                              : cleanAiResponse(interaction.ai_answer || "")}
                           </div>
                         </div>
-                      )}
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}
