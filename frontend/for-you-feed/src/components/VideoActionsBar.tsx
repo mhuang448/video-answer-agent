@@ -8,6 +8,7 @@ type VideoActionsBarProps = {
   videoId: string;
   // Add other potential props like comment count later
   commentCount?: number;
+  onCommentClick?: (videoId: string) => void; // Callback function when comment button is clicked
 };
 
 // Reusable Icon Component for Clarity
@@ -26,13 +27,28 @@ const CommentIcon = () => (
   </svg>
 );
 
+// Helper function to format numbers (e.g., 1.5K, 1.2M)
+const formatCount = (count: number): string => {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1)}M`;
+  }
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`;
+  }
+  return count.toString();
+};
+
 const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
   videoId,
   commentCount,
+  onCommentClick,
 }) => {
   const handleCommentClick = () => {
     console.log(`Comment button clicked for video ${videoId}`);
-    // TODO: Implement actual comment functionality (e.g., open modal/panel)
+    // If onCommentClick handler is provided, call it with the video id
+    if (onCommentClick) {
+      onCommentClick(videoId);
+    }
   };
 
   // Keyboard handler for accessibility
@@ -43,9 +59,7 @@ const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center space-y-6">
-      {" "}
-      {/* Vertical stack, increased spacing */}
+    <div className="flex flex-col items-center space-y-7">
       {/* Comment Button */}
       <button
         onClick={handleCommentClick}
@@ -54,14 +68,14 @@ const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
         tabIndex={0}
         className="flex flex-col items-center justify-center text-white focus:outline-none"
       >
-        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-black/30 backdrop-blur-sm hover:bg-white/20 transition-colors duration-200">
+        <div className="w-12 h-12 flex items-center justify-center rounded-full bg-black/30 backdrop-blur-sm hover:bg-white/20 transition-colors duration-200">
           <CommentIcon />
         </div>
 
         {/* Comment count display - conditionally rendered */}
         {commentCount !== undefined && (
-          <span className="text-xs font-semibold mt-1 text-white">
-            {commentCount}
+          <span className="text-xs font-medium mt-1 text-white">
+            {formatCount(commentCount)}
           </span>
         )}
       </button>

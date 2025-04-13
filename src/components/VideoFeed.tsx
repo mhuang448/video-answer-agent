@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { VideoInfo } from "@/app/types";
 import VideoPlayer from "./VideoPlayer";
-// import NotificationBell from "./NotificationBell";
 import VideoActionsBar from "./VideoActionsBar";
 import CommentSidebar from "./CommentSidebar";
 
@@ -21,9 +20,10 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
   // for this example, we'll just use the initial set
   const [videos] = useState<VideoInfo[]>(initialVideos);
   // Track which video is currently active/visible
-  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
-
-  // State for comment sidebar
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(
+    initialVideos.length > 0 ? initialVideos[0].video_id : null
+  );
+  // State for comment sidebar visibility and context
   const [isCommentSidebarOpen, setIsCommentSidebarOpen] = useState(false);
   const [commentVideoId, setCommentVideoId] = useState<string | null>(null);
 
@@ -53,6 +53,8 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
             if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
               // This video is now mostly visible
               setActiveVideoId(videoId);
+              // Close comments if user scrolls to a new video
+              // handleCloseComments(); // Optional: Decide if you want this behavior
             }
           },
           {
@@ -66,7 +68,7 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
       }
     });
 
-    // Auto-play the first video when the component mounts
+    // Auto-play the first video if not already set
     if (videos.length > 0 && !activeVideoId) {
       setActiveVideoId(videos[0].video_id);
     }
@@ -76,9 +78,9 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
       observers.current.forEach((observer) => observer.disconnect());
       observers.current.clear();
     };
-  }, [videos, activeVideoId]);
+  }, [videos, activeVideoId, isCommentSidebarOpen]); // Added isCommentSidebarOpen to deps if needed for the optional logic
 
-  // Comment sidebar handlers
+  // --- Comment Sidebar Handlers ---
   const handleOpenComments = (videoId: string) => {
     setCommentVideoId(videoId);
     setIsCommentSidebarOpen(true);
@@ -86,13 +88,9 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
 
   const handleCloseComments = () => {
     setIsCommentSidebarOpen(false);
-    // Don't clear commentVideoId immediately to allow for exit animation
-    setTimeout(() => {
-      if (!isCommentSidebarOpen) {
-        setCommentVideoId(null);
-      }
-    }, 300); // Match the transition duration
+    setCommentVideoId(null); // Clear the video ID when closing
   };
+  // --- End Comment Sidebar Handlers ---
 
   if (!videos || videos.length === 0) {
     return (
@@ -102,49 +100,52 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
     );
   }
 
-  // For demo purposes, ensure videos have comment_count
-  const videosWithComments = videos.map((video) => ({
-    ...video,
-    comment_count: video.comment_count || Math.floor(Math.random() * 100), // Add random count for demo
-  }));
-
   return (
-    <React.Fragment>
+    <>
       <div className="bg-black h-screen w-full relative">
-        {/* Notification Bell - Fixed in top right */}
-        <div className="absolute top-4 right-4 z-20">
-          {/* future feature */}
-          {/* <NotificationBell count={3} /> */}
-        </div>
+        {/* Notification Bell - Fixed in top right (Placeholder) */}
+        {/* <div className="absolute top-4 right-4 z-20">
+          <NotificationBell count={3} />
+        </div> */}
 
         {/* Videos Container - Full screen, vertical scroll, snap mandatory */}
         <div
           ref={scrollContainerRef}
           className="h-screen w-screen overflow-y-scroll snap-y snap-mandatory scrollbar-hide bg-black"
         >
-          {videosWithComments.map((video, index) => (
+          {videos.map((video, index) => (
             // Each video container occupies full screen height and snaps into view
             <div
               id={`video-container-${video.video_id}`}
               key={video.video_id || `video-${index}`}
-              className="h-screen w-screen snap-start flex justify-center items-center"
+              className="h-screen w-screen snap-start flex justify-center items-center relative" // Added relative positioning
             >
               {/* Horizontal container for video and action bar */}
-              <div className="flex items-center justify-center gap-4">
+              <div className="flex items-end justify-center gap-4 relative h-[calc(100vh-80px)] max-h-[800px]">
+                {" "}
+                {/* Adjust positioning and height */}
                 {/* Inner container to constrain video width and center it */}
-                <div className="relative h-[90vh] max-w-sm w-full aspect-[9/16]">
+                <div className="relative h-full w-auto max-w-[calc((100vh-80px)*(9/16))] aspect-[9/16] rounded-lg overflow-hidden bg-gray-900 shadow-lg">
+                  {" "}
+                  {/* Use aspect ratio */}
                   <VideoPlayer
                     videoInfo={video}
                     isActive={activeVideoId === video.video_id}
                   />
+                  {/* Video Info Overlay (Example from VideoCard - integrate if needed)
+                  <div className="absolute bottom-20 left-4 z-10 text-white p-3 rounded-lg bg-black/40 backdrop-blur-sm max-w-[70%]">
+                    <h3 className="text-lg font-semibold mb-1">@{video.uploader_name || "Unknown Creator"}</h3>
+                    <p className="text-sm text-gray-200 opacity-90">ID: {video.video_id.substring(0, 8)}...</p>
+                  </div> */}
                 </div>
-
-                {/* Video Actions Bar - positioned to the right of the video */}
-                <div className="flex-shrink-0 ml-3">
+                {/* Video Actions Bar - positioned vertically to the right */}
+                <div className="flex-shrink-0 flex flex-col justify-end pb-16">
+                  {" "}
+                  {/* Adjust positioning */}
                   <VideoActionsBar
                     videoId={video.video_id}
-                    commentCount={video.comment_count}
-                    onCommentClick={handleOpenComments}
+                    commentCount={video.comment_count} // Pass comment count
+                    onCommentClick={handleOpenComments} // Pass the open handler
                   />
                 </div>
               </div>
@@ -153,19 +154,18 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
         </div>
       </div>
 
-      {/* Render the Comment Sidebar - Conditionally to ensure clean unmounting */}
+      {/* Render Comment Sidebar Conditionally - Outside the scroll container */}
+      {/* Ensure commentVideoId is not null before rendering */}
       {commentVideoId && (
         <CommentSidebar
           isOpen={isCommentSidebarOpen}
           onClose={handleCloseComments}
           videoId={commentVideoId}
-          commentCount={
-            videos.find((v) => v.video_id === commentVideoId)?.comment_count ||
-            0
-          }
+          // Optionally find the comment count for the specific video:
+          // commentCount={videos.find(v => v.video_id === commentVideoId)?.comment_count ?? 0}
         />
       )}
-    </React.Fragment>
+    </>
   );
 };
 

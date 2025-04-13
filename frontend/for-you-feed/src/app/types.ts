@@ -7,6 +7,7 @@ export interface VideoInfo {
   video_id: string;
   video_url: string;
   like_count: number;
+  comment_count?: number;
   uploader_name?: string;
 }
 
@@ -55,4 +56,15 @@ export interface StatusResponse {
   like_count?: number;
   uploader_name?: string;
   interactions: Interaction[];
+}
+
+/**
+ * Represents a single comment on a video.
+ */
+export interface Comment {
+  id: string; // Unique identifier for the comment
+  videoId: string; // ID of the video this comment belongs to
+  author: string; // Name of the commenter (placeholder for now)
+  text: string; // The content of the comment
+  timestamp: Date; // When the comment was submitted
 }
