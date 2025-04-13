@@ -161,7 +161,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
         </div>
 
         {/* Comment List - Scrollable with improved spacing */}
-        <div className="flex-grow overflow-y-auto pt-2 pb-4 scrollbar-hide">
+        <div className="flex-grow overflow-y-auto pt-5 pb-4 scrollbar-hide">
           {submittedComments.length === 0 ? (
             <div className="text-gray-400 text-center py-12">
               <p className="text-base">No comments yet</p>
@@ -169,10 +169,13 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
             </div>
           ) : (
             submittedComments.map((comment) => (
-              <div key={comment.id} className="px-4 py-4 hover:bg-gray-900/30">
-                <div className="flex items-start space-x-3">
+              <div
+                key={comment.id}
+                className="px-5 py-5 mb-2 hover:bg-gray-900/30"
+              >
+                <div className="flex items-start space-x-4">
                   {/* User Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-gray-700 flex-shrink-0 overflow-hidden">
+                  <div className="w-10 h-10 rounded-full bg-gray-700 flex-shrink-0 overflow-hidden">
                     {/* Placeholder for avatar - in a real app, this would be an image */}
                     <div className="w-full h-full flex items-center justify-center text-white font-bold">
                       {comment.author.charAt(0).toUpperCase()}
@@ -180,12 +183,12 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
                   </div>
 
                   <div className="flex-1">
-                    {/* Author and timestamp */}
-                    <div className="flex items-center">
+                    {/* Author and timestamp with improved spacing */}
+                    <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold text-white">
                         {comment.author}
                       </p>
-                      <p className="text-xs text-gray-500 ml-2">
+                      <p className="text-xs text-gray-500">
                         {comment.timestamp.toLocaleTimeString([], {
                           hour: "numeric",
                           minute: "2-digit",
@@ -193,14 +196,14 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
                       </p>
                     </div>
 
-                    {/* Comment text */}
-                    <p className="text-sm text-white mt-1 mb-2">
+                    {/* Comment text with better spacing */}
+                    <p className="text-sm text-white mt-2 mb-3">
                       {comment.text}
                     </p>
 
-                    {/* Comment actions - only Reply */}
+                    {/* Comment actions - only Reply with reduced opacity */}
                     <div className="flex items-center">
-                      <button className="text-xs text-gray-500 hover:text-white">
+                      <button className="text-xs text-gray-400 hover:text-white opacity-85 transition-colors duration-200">
                         Reply
                       </button>
                     </div>
@@ -212,7 +215,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
         </div>
 
         {/* Comment Input Form - Fixed at bottom with Post button inside */}
-        <div className="px-4 pt-2 pb-4 border-t border-gray-800 flex-shrink-0 bg-black">
+        <div className="px-4 pt-3 pb-4 border-t border-gray-800 flex-shrink-0 bg-black">
           <form
             onSubmit={handleSubmitComment}
             className="relative" // Relative to position the post button
@@ -224,16 +227,16 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
               placeholder="Add comment..."
               aria-label="Add a comment"
               rows={3}
-              className="w-full bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 pr-14 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none text-white text-sm placeholder-gray-500"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 pr-14 focus:outline-none focus:border-gray-600 focus:ring-0 transition-colors duration-200 resize-none text-white text-sm placeholder-gray-500"
             />
             <button
               type="submit"
               disabled={!commentText.trim()}
               aria-label="Post comment"
-              className={`absolute bottom-3 right-3 p-2 rounded-full transition-colors ${
+              className={`absolute bottom-3 right-3 p-2 rounded-full transition-colors duration-200 ${
                 commentText.trim()
                   ? "bg-white hover:bg-gray-200 text-black"
-                  : "bg-gray-800 text-gray-500 cursor-not-allowed"
+                  : "bg-gray-700 text-gray-500 cursor-not-allowed"
               }`}
             >
               <SendIcon />

@@ -105,7 +105,7 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
   // For demo purposes, ensure videos have comment_count
   const videosWithComments = videos.map((video) => ({
     ...video,
-    comment_count: video.comment_count || Math.floor(Math.random() * 100), // Add random count for demo
+    comment_count: video.comment_count || 0,
   }));
 
   return (

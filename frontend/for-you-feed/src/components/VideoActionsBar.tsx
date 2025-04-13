@@ -8,7 +8,7 @@ type VideoActionsBarProps = {
   videoId: string;
   // Add other potential props like comment count later
   commentCount?: number;
-  onCommentClick?: (videoId: string) => void; // Callback function when comment button is clicked
+  onCommentClick: (videoId: string) => void; // Callback function when comment button is clicked
 };
 
 // Reusable Icon Component for Clarity
@@ -40,15 +40,13 @@ const formatCount = (count: number): string => {
 
 const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
   videoId,
-  commentCount,
+  //   commentCount,
   onCommentClick,
 }) => {
   const handleCommentClick = () => {
     console.log(`Comment button clicked for video ${videoId}`);
-    // If onCommentClick handler is provided, call it with the video id
-    if (onCommentClick) {
-      onCommentClick(videoId);
-    }
+    // Call the passed-in handler
+    onCommentClick(videoId);
   };
 
   // Keyboard handler for accessibility
@@ -64,7 +62,7 @@ const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
       <button
         onClick={handleCommentClick}
         onKeyDown={handleKeyDown}
-        aria-label="View comments" // More specific label
+        aria-label="View comments"
         tabIndex={0}
         className="flex flex-col items-center justify-center text-white focus:outline-none"
       >
@@ -72,12 +70,12 @@ const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
           <CommentIcon />
         </div>
 
-        {/* Comment count display - conditionally rendered */}
+        {/* Comment count display - conditionally rendered
         {commentCount !== undefined && (
           <span className="text-xs font-medium mt-1 text-white">
             {formatCount(commentCount)}
           </span>
-        )}
+        )} */}
       </button>
       {/* Future buttons (Like, Share, Bookmark) would go here */}
       {/* Example structure:
