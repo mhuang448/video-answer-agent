@@ -6,13 +6,18 @@ import { PlayIcon, PauseIcon } from "@heroicons/react/24/solid";
 
 interface VideoPlayerProps {
   videoInfo: VideoInfo;
+  isActive?: boolean;
 }
 
 /**
  * Represents a single video player within the feed.
  * Handles play/pause on click, progress bar, and info display.
+ * Auto-pauses when not active in viewport and auto-plays when active.
  */
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoInfo }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({
+  videoInfo,
+  isActive = false,
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -91,6 +96,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoInfo }) => {
       setShowPlayIcon(true); // Show play icon when ended
     }, 300);
   }, []);
+
+  // Effect to automatically play or pause video based on isActive prop
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    const videoElement = videoRef.current;
+
+    if (isActive) {
+      // This video is active/visible
+      videoElement
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setShowPlayIcon(false);
+          triggerIconFade("play");
+        })
+        .catch((error) => {
+          console.error("Auto-play failed:", error);
+          setIsPlaying(false);
+          setShowPlayIcon(true);
+        });
+    } else {
+      // This video is not active/visible - pause it
+      if (!videoElement.paused) {
+        videoElement.pause();
+        setIsPlaying(false);
+        setShowPlayIcon(true);
+      }
+    }
+  }, [isActive]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
