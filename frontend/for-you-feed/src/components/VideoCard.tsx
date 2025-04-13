@@ -2,8 +2,6 @@
 
 import { useRef, useEffect } from "react";
 import { VideoInfo } from "@/app/types";
-import LikeButton from "./LikeButton";
-import CommentButton from "./CommentButton";
 
 interface VideoCardProps {
   video: VideoInfo;
@@ -56,15 +54,6 @@ const VideoCard = ({ video, isActive }: VideoCardProps) => {
         <p className="text-sm text-gray-200 opacity-90">
           Video ID: {video.video_id.substring(0, 8)}...
         </p>
-      </div>
-
-      {/* Controls - Enhanced with better spacing and animations */}
-      <div className="absolute bottom-20 right-4 z-10 flex flex-col space-y-6">
-        <LikeButton
-          videoId={video.video_id}
-          initialLikeCount={video.like_count}
-        />
-        <CommentButton />
       </div>
     </div>
   );
