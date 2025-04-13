@@ -96,117 +96,121 @@ def get_video_metadata_from_s3(bucket: str, key: str) -> dict:
         print(f"Unexpected error reading metadata from s3://{bucket}/{key}: {e}")
         raise
 
-def get_interactions_from_s3(bucket: str, key: str) -> list:
-    """Reads the interactions.json file from S3 and returns the list of interactions.
-    If the file doesn't exist, returns an empty list."""
+def get_interactions_from_s3(s3_bucket: str, s3_interactions_key: str) -> List[Dict[str, Any]]:
+    """Fetches the list of interactions from the interactions JSON file in S3."""
     try:
-        response = S3_CLIENT.get_object(Bucket=bucket, Key=key)
+        response = S3_CLIENT.get_object(Bucket=s3_bucket, Key=s3_interactions_key)
         content = response['Body'].read().decode('utf-8')
-        data = json.loads(content)
-        interactions = data.get('interactions', [])
-        print(f"Successfully read {len(interactions)} interactions from s3://{bucket}/{key}")
+        interactions = json.loads(content)
+        if not isinstance(interactions, list):
+             print(f"Warning: Interactions data at {s3_interactions_key} is not a list. Returning empty.")
+             return []
+        # Validate structure slightly - ensure items are dicts (optional but good practice)
+        # interactions = [item for item in interactions if isinstance(item, dict)]
         return interactions
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchKey':
-            print(f"Interactions file not found: s3://{bucket}/{key} - This is normal for first query")
-            return []  # Return empty list for first interaction
+             print(f"Interactions file not found at {s3_interactions_key}. Returning empty list.")
+             return [] # Return empty list if file doesn't exist yet
         else:
-            print(f"Error reading interactions from S3 s3://{bucket}/{key}: {e}")
-            raise
+            print(f"Error getting interactions from S3 ({s3_interactions_key}): {e}")
+            raise # Re-raise other S3 errors
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from s3://{bucket}/{key}: {e}")
-        raise ValueError("Invalid JSON content in interactions file")
+        print(f"Error decoding interactions JSON from S3 ({s3_interactions_key}): {e}")
+        # Decide how to handle corrupted JSON, maybe return empty list or raise?
+        # Returning empty might be safer for polling.
+        return []
     except Exception as e:
-        print(f"Unexpected error reading interactions from s3://{bucket}/{key}: {e}")
+        print(f"Unexpected error reading interactions from S3 ({s3_interactions_key}): {e}")
+        # Consider logging the error more formally
+        return [] # Return empty list on unexpected errors as well for polling robustness
+
+def add_interaction_to_s3(s3_bucket: str, s3_interactions_key: str, new_interaction_data: Dict[str, Any]):
+    """Adds a new interaction object to the interactions JSON file in S3."""
+    # Read-modify-write with basic error handling for file existence/format.
+    # WARNING: Potential race condition if multiple queries arrive near-simultaneously.
+    try:
+        # Fetch existing interactions, defaulting to an empty list if not found or invalid.
+        interactions = get_interactions_from_s3(s3_bucket, s3_interactions_key)
+
+        # Append the new interaction dictionary.
+        # Ensure the passed 'new_interaction_data' contains all required fields like
+        # 'interaction_id', 'user_name', 'user_query', 'query_timestamp', 'status'.
+        interactions.append(new_interaction_data)
+
+        # Write the updated list back to S3
+        S3_CLIENT.put_object(
+            Bucket=s3_bucket,
+            Key=s3_interactions_key,
+            Body=json.dumps(interactions, indent=2), # Use indent for readability
+            ContentType='application/json'
+        )
+        print(f"Successfully added interaction {new_interaction_data.get('interaction_id')} to {s3_interactions_key}")
+
+    except ClientError as e:
+        # Catch S3 errors specifically during the put_object call
+        print(f"S3 ClientError putting updated interactions to {s3_interactions_key}: {e}")
+        raise # Re-raise S3 errors during write
+    except Exception as e:
+        # Catch other unexpected errors during the add process
+        print(f"Unexpected error adding interaction to S3 ({s3_interactions_key}): {e}")
         raise
 
-def add_interaction_to_s3(bucket: str, key: str, interaction: dict):
-    """Adds a new interaction to the interactions.json file.
-    Creates the file if it doesn't exist."""
-    print(f"Adding interaction {interaction.get('interaction_id')} to s3://{bucket}/{key}")
-    retries = 3
-    
-    for attempt in range(retries):
-        try:
-            # Get existing interactions or start with empty list
-            try:
-                interactions = get_interactions_from_s3(bucket, key)
-            except:
-                interactions = []
-            
-            # Add the new interaction
-            interactions.append(interaction)
-            
-            # Write back to S3
-            data = {'interactions': interactions}
-            S3_CLIENT.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=json.dumps(data, indent=2),
-                ContentType='application/json'
-            )
-            print(f"Successfully added interaction {interaction.get('interaction_id')} to s3://{bucket}/{key}")
-            return  # Success, exit retry loop
-            
-        except ClientError as e:
-            print(f"S3 ClientError on attempt {attempt + 1} adding interaction to {key}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
-            
-        except Exception as e:
-            print(f"Error adding interaction to {key} on attempt {attempt + 1}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
+def update_interaction_status_in_s3(s3_bucket: str, s3_interactions_key: str, interaction_id: str, new_status: str, ai_answer: Optional[str] = None):
+    """Updates status and optionally ai_answer for a specific interaction in S3."""
+    # Read-modify-write logic.
+    # WARNING: Potential race condition.
+    try:
+        # Fetch existing interactions. If file is invalid/not found, this will return [] or raise.
+        interactions = get_interactions_from_s3(s3_bucket, s3_interactions_key)
 
-def update_interaction_status_in_s3(bucket: str, key: str, interaction_id: str, status: str, final_answer: str = None, answer_timestamp: str = None):
-    """Updates an existing interaction's status in the interactions.json file."""
-    print(f"Attempting to update interaction {interaction_id} in s3://{bucket}/{key} to status: {status}")
-    retries = 3
-    for attempt in range(retries):
-        try:
-            # 1. GET current interactions
-            interactions = get_interactions_from_s3(bucket, key)
-            
-            # 2. Find and Update Interaction
-            interaction_found = False
-            for interaction in interactions:
-                if interaction.get('interaction_id') == interaction_id:
-                    interaction['status'] = status
-                    if final_answer is not None:
-                        interaction['ai_answer'] = final_answer
-                        interaction['answer_timestamp'] = answer_timestamp or datetime.now(timezone.utc).isoformat()
-                    interaction_found = True
-                    break
+        if not interactions:
+             print(f"Warning: Interactions file {s3_interactions_key} is empty or missing. Cannot update status for {interaction_id}.")
+             # If the file was missing, we can't update. If it was empty, the loop below won't run.
+             # We might choose to raise an error here depending on expected behavior.
+             # For now, just log and return, preventing the put_object call.
+             return # Exit early
 
-            if not interaction_found:
-                print(f"Warning: Interaction ID {interaction_id} not found in {key}. Cannot update status.")
-                # Could add logic to create it if missing, but this shouldn't happen in normal flow
-                return
+        # Find and update the interaction in the list
+        interaction_found = False
+        updated_interactions = [] # Build a new list to ensure clean data
+        for interaction in interactions:
+            # Check if it's a dictionary and the ID matches
+            if isinstance(interaction, dict) and interaction.get('interaction_id') == interaction_id:
+                # Create a copy to modify, preserving original fields
+                updated_interaction = interaction.copy()
+                updated_interaction['status'] = new_status
+                updated_interaction['answer_timestamp'] = datetime.now(timezone.utc).isoformat()
+                if ai_answer is not None:
+                    updated_interaction['ai_answer'] = ai_answer
+                updated_interactions.append(updated_interaction)
+                interaction_found = True
+                print(f"Prepared update for interaction {interaction_id} status to {new_status}.")
+            elif isinstance(interaction, dict):
+                # Keep other valid interactions
+                updated_interactions.append(interaction)
+            # else: skip invalid entries if any
 
-            # 3. PUT updated interactions back
-            data = {'interactions': interactions}
-            S3_CLIENT.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=json.dumps(data, indent=2),
-                ContentType='application/json'
-            )
-            print(f"Successfully updated interaction {interaction_id} status to {status} in s3://{bucket}/{key}")
-            return # Success, exit retry loop
+        if not interaction_found:
+            print(f"Warning: Interaction ID {interaction_id} not found in {s3_interactions_key}. No status update performed.")
+            # No need to write back if nothing changed
+            return
 
-        except ClientError as e:
-            print(f"S3 ClientError on attempt {attempt + 1} updating {key}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
+        # Write the updated list back to S3
+        S3_CLIENT.put_object(
+            Bucket=s3_bucket,
+            Key=s3_interactions_key,
+            Body=json.dumps(updated_interactions, indent=2),
+            ContentType='application/json'
+        )
+        print(f"Successfully saved updated interactions to {s3_interactions_key} after status update for {interaction_id}.")
 
-        except Exception as e:
-            print(f"Error updating interaction status in {key} on attempt {attempt + 1}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
+    except ClientError as e:
+        print(f"S3 ClientError putting updated interactions (status update) to {s3_interactions_key}: {e}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error updating interaction status in S3 ({s3_interactions_key}): {e}")
+        raise
 
 def update_overall_processing_status(bucket: str, key: str, overall_status: str):
     """Reads the S3 JSON, updates the top-level processing_status, writes it back."""
@@ -870,8 +874,7 @@ async def run_query_pipeline_async(
         # 7. Update status to completed with the answer
         update_interaction_status_in_s3(
             s3_bucket, s3_interactions_path, interaction_id, "completed",
-            final_answer=final_answer,
-            answer_timestamp=datetime.now(timezone.utc).isoformat()
+            ai_answer=final_answer
         )
         print(f"BACKGROUND TASK: Query pipeline for interaction {interaction_id} COMPLETED.")
 

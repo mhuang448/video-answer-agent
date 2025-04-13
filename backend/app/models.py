@@ -17,11 +17,6 @@ class ProcessRequest(BaseModel):
 
 # --- Response Models ---
 
-class VideoInfo(BaseModel):
-    video_id: str
-    video_url: str # Publicly accessible S3 URL
-    like_count: int = Field(0, description="Number of likes for the video.")
-    uploader_name: Optional[str] = Field(None, description="Username of the video uploader.")
 
 class ProcessingStartedResponse(BaseModel):
     status: str = "Query processing started" # Or "Full video processing..."
@@ -36,6 +31,13 @@ class Interaction(BaseModel):
     status: str # e.g., 'processing', 'completed', 'failed'
     ai_answer: Optional[str] = None # Answer is None until status is 'completed'
     answer_timestamp: Optional[str] = None # ISO 8601 format string
+
+class VideoInfo(BaseModel):
+    video_id: str
+    video_url: str # Publicly accessible S3 URL
+    like_count: int = Field(0, description="Number of likes for the video.")
+    uploader_name: Optional[str] = Field(None, description="Username of the video uploader.")
+    interactions: Optional[List[Interaction]] = Field(None, description="List of interactions for the video.")
 
 class StatusResponse(BaseModel):
     processing_status: Optional[str] = None # Overall status of the video ingestion
