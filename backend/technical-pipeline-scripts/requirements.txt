@@ -1,0 +1,17 @@
+yt_dlp
+moviepy
+TikTokApi
+python-dotenv
+google-genai
+scenedetect
+opencv-python
+pydantic
+
+pinecone[grpc]
+openai
+
+
+# may get rid of these
+openai-whisper
+llama-index
+llama-index-vector-stores-pinecone
