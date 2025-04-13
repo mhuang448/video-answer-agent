@@ -25,14 +25,14 @@ const VideoCard = ({ video, isActive }: VideoCardProps) => {
   }, [isActive]);
 
   // Format like count with K, M for thousands/millions
-  const formatLikeCount = (count: number): string => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K`;
-    }
-    return count.toString();
-  };
+  // const formatLikeCount = (count: number): string => {
+  //   if (count >= 1000000) {
+  //     return `${(count / 1000000).toFixed(1)}M`;
+  //   } else if (count >= 1000) {
+  //     return `${(count / 1000).toFixed(1)}K`;
+  //   }
+  //   return count.toString();
+  // };
 
   return (
     <div className="relative h-screen w-full snap-start bg-black flex items-center justify-center overflow-hidden">

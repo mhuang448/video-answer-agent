@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { VideoInfo } from "@/app/types";
 import VideoPlayer from "./VideoPlayer";
-import NotificationBell from "./NotificationBell";
+// import NotificationBell from "./NotificationBell";
+import VideoActionsBar from "./VideoActionsBar";
 
 interface VideoFeedProps {
   initialVideos: VideoInfo[];
@@ -83,7 +84,8 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
     <div className="bg-black h-screen w-full relative">
       {/* Notification Bell - Fixed in top right */}
       <div className="absolute top-4 right-4 z-20">
-        <NotificationBell count={3} />
+        {/* future feature */}
+        {/* <NotificationBell count={3} /> */}
       </div>
 
       {/* Videos Container - Full screen, vertical scroll, snap mandatory */}
@@ -98,12 +100,20 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
             key={video.video_id || `video-${index}`}
             className="h-screen w-screen snap-start flex justify-center items-center"
           >
-            {/* Inner container to constrain video width and center it */}
-            <div className="relative h-[90vh] max-w-sm w-full aspect-[9/16]">
-              <VideoPlayer
-                videoInfo={video}
-                isActive={activeVideoId === video.video_id}
-              />
+            {/* Horizontal container for video and action bar */}
+            <div className="flex items-center justify-center gap-4">
+              {/* Inner container to constrain video width and center it */}
+              <div className="relative h-[90vh] max-w-sm w-full aspect-[9/16]">
+                <VideoPlayer
+                  videoInfo={video}
+                  isActive={activeVideoId === video.video_id}
+                />
+              </div>
+
+              {/* Video Actions Bar - positioned to the right of the video */}
+              <div className="flex-shrink-0 ml-3">
+                <VideoActionsBar videoId={video.video_id} />
+              </div>
             </div>
           </div>
         ))}
