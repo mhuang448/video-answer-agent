@@ -62,8 +62,7 @@ This system operates via two primary workflows: preparing video content and answ
 
 ## Architecture Overview
 
-![Architecture Diagram Placeholder](link_or_embed_your_diagram_here.png)
-_(Self-note: Replace with actual link/diagram)_
+![Architecture Diagram Placeholder](AskAI_RAG_MCP_Agent.png)
 
 - **Frontend (Next.js / Vercel):** UI, interactions, API calls (TypeScript, Tailwind CSS, App Router).
 - **Backend (FastAPI / AWS App Runner):** API handling, background task management (distinct tasks for full processing vs. Q&A only), AI service orchestration (Python, Docker).
@@ -133,7 +132,7 @@ _Access at `http://localhost:3000`._
 
 **4. MCP Server Setup:**
 
-- **[TODO: Improve]** Provide instructions on building MCP Server (/backend/perplexity-mcp-server `npm run build` and from run `node dist/index.js`)
+- See documentation in `/backend/perplexity-mcp-server/PERPLEXITY_MCP_SERVER.md`
 
 **5. AWS/S3 Configuration:**
 _ Ensure S3 bucket exists with public read policy for `.mp4` and CORS configured for `localhost:3000` and deployed frontend URL.
