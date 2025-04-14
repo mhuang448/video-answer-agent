@@ -20,11 +20,11 @@ This system operates via two primary workflows: preparing video content and answ
 
 **1. Video Processing & Knowledge Base Creation (Pre-computation)**
 
-- _This process happens **before** a video appears on the main feed. Scripts to accomplish this are in the /backend/technical_pipeline_scripts folder_
+- _This process happens **before** a video appears on the main feed. Scripts to accomplish this are in the `/backend/technical_pipeline_scripts` folder_
 - **Acquisition & Chunking:** Downloads video from URL, splits video into chunks intelligently (scene detection with PySceneDetect with fallback to fixed duration chunking), and stores important metadata about the video and chunks (timestamps, duration, chunk number, etc).
 - **Generating Chunk Captions and Overall Summary:** Generates detailed captions for each video chunk (using Gemini 2.5 Pro), then uses captions to query OpenAI to generate overall summary and extract key themes.
 - **Indexing for Retrieval:** Creates vector embeddings with OpenAI's `text-embedding-ada-002` from captions and indexes them in Pinecone along with relevant metadata, building a searchable knowledge base specific to the video.
-- **Upload to S3:** Video data (.mp4 file for full video, .mp4 files for video chunks, <video_id>.json files with generated chunk captions, overall video summary, key themes, and key metadata about video/chunks) are uploaded into our S3 bucket. This S3 data, along with our Pinecone index, forms our knowledge base for retrieval augmented generation (RAG).
+- **Upload to S3:** Video data (.mp4 file for full video, .mp4 files for video chunks, <video_id>.json files with generated chunk captions, overall video summary, key themes, and key metadata about video/chunks) are uploaded into our S3 bucket. This S3 data, along with our Pinecone index, forms our knowledge base for retrieval augmented generation (RAG). S3 Uploading is done in our `backend/s3_upload_all_video_data.py` script.
 
 **2. Real-time: Answering a Query (`@AskAI` on the Feed)**
 
@@ -38,10 +38,8 @@ This system operates via two primary workflows: preparing video content and answ
 
 ## Core Features
 
-- **Interactive Video Feed:** Scrollable feed displaying **pre-processed** videos ready for Q&A. The main viewable page will containt consist of the current video played, a like button (displaying number of likes), and a comment button (for user to comment). There will also be a notification bell in the top right. Users can scroll down to see a new video. On that video they can scroll down to see another video. THAT IS ALL THERE IS to the UI. DO NOT OVERCOMPLICATE UI. We are prioritizing rapid development and demo-ing the cool AskAI feature.
+- **Interactive Video Feed:** Scrollable feed displaying **pre-processed** videos ready for Q&A. The main viewable page will containt consist of the current video played, and a comment button (for user to comment and @AskAI a query about the video). Users can scroll down to see a new video.
 - **`@AskAI` Feature:** Asynchronous Q&A on feed videos via comment tag (`@AskAI`), leveraging RAG + MCP for answers.
-- **New Video Processing & Querying:** Dedicated interface to submit a new video URL and an initial question, triggering the _full_ processing pipeline (Steps 1 & 2 above).
-- **Notification System:** A bell icon in the UI indicates new answers are ready with a count of unread responses.
 
 ## User Experience Flow
 
@@ -50,13 +48,7 @@ This system operates via two primary workflows: preparing video content and answ
     - Tap comment icon on a feed video.
     - Tag `@AskAI`, type question, submit.
     - Continue browsing; the RAG+MCP answer generation runs in the background.
-3.  **Process & Ask on New Video:**
-    - Navigate to the "Process New Video" page/section.
-    - Submit a video URL (e.g., TikTok) and an initial question.
-    - The _full_ pipeline runs (download, chunk, analyze, index, RAG, MCP, synthesize).
-    - User can navigate away; processing occurs in the background.
-4.  **Get Notified:** A red number appears on the bell icon (top right) when new answers (from either flow) are ready.
-5.  **View Answer:** Click the notification or navigate to the relevant video's comment section to read the AI-generated reply.
+3.  **View Answer:** Navigate to the relevant video's comment section and read the AI-generated reply.
 
 ## Architecture Overview
 
@@ -83,15 +75,15 @@ _(Self-note: Replace with actual link/diagram)_
 - **Answer Engine:** Provides LLM answers to queries about videos.
 - **RAG:** Implemented using video captions indexed in Pinecone.
 - **LLM Response:** Uses `gpt-4o-mini` for synthesis, incorporating RAG/MCP context.
-- **Creative Theme:** Interactive Q&A on a video feed (`@AskAI`) + new video processing.
+- **Creative Theme:** Interactive Q&A on a video feed (`@AskAI`) + crafting a high quality knowledge base for each video (detailed scene captions indexed into Pinecone VectorDB plus overall summary and key themes).
 - **Tech Stack:** Python, TypeScript, Next.js, Tailwind CSS utilized.
 - **UI:** Functional vertical feed and processing interface.
 - **Advanced Features:** Agentic behavior via RAG + MCP tool selection/use.
 
 ## Key Dependencies
 
-- **Libraries/SDKs:** Boto3, Pinecone Client, OpenAI Clients, Google Cloud Clients, Anthropic Client, FastAPI, Next.js, `PySceneDetect`, `yt-dlp`, `mcp`, `fastmcp` library.
-- **External APIs:** AWS, Pinecone, OpenAI, Google Cloud, Perplexity, Anthropic.
+- **Libraries/SDKs:** Boto3, Pinecone Client, OpenAI Clients, Google GenAI Clients, Anthropic Client, FastAPI, Next.js, `PySceneDetect`, `yt-dlp`, `mcp`, `fastmcp` library.
+- **External APIs:** AWS, Pinecone, OpenAI, Google Gemini, Perplexity, Anthropic.
 
 ## Setup & Running Locally
 

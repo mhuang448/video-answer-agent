@@ -4,6 +4,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { VideoInfo } from "@/app/types";
 import { PlayIcon, PauseIcon } from "@heroicons/react/24/solid";
 
+/**
+ * Extracts username from video_id which has the format <username>-<tiktok_id>
+ */
+const extractUsernameFromVideoId = (videoId: string): string => {
+  if (!videoId) return "Unknown Creator";
+  const parts = videoId.split("-");
+  return parts[0] || "Unknown Creator";
+};
+
 interface VideoPlayerProps {
   videoInfo: VideoInfo;
   isActive?: boolean;
@@ -192,11 +201,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Video Info Overlay */}
       <div className="absolute bottom-8 left-4 text-white text-shadow pointer-events-none select-none">
         <p className="font-semibold text-base drop-shadow-md">
-          @{videoInfo.uploader_name || "Unknown Creator"}
-        </p>
-        {/* Optional: Display Video ID or other info */}
-        <p className="text-sm drop-shadow-md">
-          ID: {videoInfo.video_id.substring(0, 8)}...
+          @
+          {extractUsernameFromVideoId(videoInfo.video_id) ||
+            videoInfo.uploader_name ||
+            "Unknown Creator"}
         </p>
       </div>
 
