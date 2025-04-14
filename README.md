@@ -1,10 +1,16 @@
 # Video Answer AI Agent (@AskAI Feature)
 
-**Live Demo:** [Link to your deployed application]
-
 **Video Walkthrough:** [Link to your ~2 min video demo]
 
-**Architecture Diagram:** [Link to diagram image/document or embed below]
+**Architecture Diagrams:**
+
+Video Processing & Knowledge Base Creation
+
+![Video Processing & Knowledge Base Creation](Video_processing_Pipeline.png)
+
+AskAI RAG + MCP AI Agent
+
+![AskAI RAG+MCP AI Answer Agent](AskAI_RAG_MCP_Agent.png)
 
 _Note: This project is inspired by Perplexity's recent initiative to bring the @AskPerplexity feature to the TikTok For You page: ([Blog Post: Rebuilding TikTok in America](https://www.perplexity.ai/hub/blog/rebuilding-tiktok-in-america))_
 
