@@ -15,14 +15,11 @@ from .models import (
     ProcessingStartedResponse, StatusResponse, LikeResponse
 )
 from .utils import (
-    CONFIG, determine_if_processed, get_s3_json_path, get_s3_interactions_path,
-    generate_unique_video_id, get_s3_video_base_path
+    CONFIG, get_s3_json_path, get_s3_interactions_path
 )
 from .pipeline_logic import (
-    run_query_pipeline_async, run_full_pipeline_async,
-    get_video_metadata_from_s3, get_interactions_from_s3,
-    # Assume this helper exists to list preprocessed video IDs
-    # get_list_of_preprocessed_video_ids
+    run_query_pipeline_async,
+    get_video_metadata_from_s3, get_interactions_from_s3
 )
 
 # --- FastAPI App Setup ---
@@ -174,7 +171,6 @@ async def query_processed_video(query: QueryRequest, background_tasks: Backgroun
     s3_bucket = CONFIG["s3_bucket_name"]
 
     # Create the interaction data structure including username
-    # IMPORTANT: Ensure this structure matches the Interaction Pydantic model
     interaction = {
         "interaction_id": interaction_id,
         "user_name": query.user_name, # Added username
@@ -186,7 +182,6 @@ async def query_processed_video(query: QueryRequest, background_tasks: Backgroun
     }
 
     # Add the task to run in the background
-    # NOTE: run_query_pipeline_async MUST be updated to accept user_name
     background_tasks.add_task(
         run_query_pipeline_async,
         video_id=query.video_id,
@@ -202,55 +197,6 @@ async def query_processed_video(query: QueryRequest, background_tasks: Backgroun
     return ProcessingStartedResponse(
         status="Query processing started",
         video_id=query.video_id,
-        interaction_id=interaction_id
-    )
-
-
-@app.post("/api/process_and_query/async", response_model=ProcessingStartedResponse, status_code=202, tags=["Query"])
-async def process_new_video_and_query(process_req: ProcessRequest, background_tasks: BackgroundTasks):
-    """Triggers async FULL pipeline for a NEW video URL, including user/uploader names."""
-    print(f"Received request for new video {process_req.video_url} by user '{process_req.user_name}' with query: {process_req.user_query}") # Log username
-
-    video_id = generate_unique_video_id(process_req.video_url)
-    interaction_id = str(uuid.uuid4())
-    query_timestamp = datetime.now(timezone.utc).isoformat()
-
-    s3_json_path = get_s3_json_path(video_id)
-    s3_interactions_path = get_s3_interactions_path(video_id)
-    s3_video_base_path = get_s3_video_base_path(video_id)
-    s3_bucket = CONFIG["s3_bucket_name"]
-
-    # Create the interaction data structure including username
-    # IMPORTANT: Ensure this structure matches the Interaction Pydantic model
-    interaction = {
-        "interaction_id": interaction_id,
-        "user_name": process_req.user_name, # Added username
-        "user_query": process_req.user_query,
-        "query_timestamp": query_timestamp,
-        "status": "processing", # Will be updated by the pipeline
-        "ai_answer": None,
-        "answer_timestamp": None
-    }
-
-    # Add the task to run in the background
-    # NOTE: run_full_pipeline_async MUST be updated to accept user_name, uploader_name, and interaction
-    background_tasks.add_task(
-        run_full_pipeline_async,
-        video_url=process_req.video_url,
-        user_query=process_req.user_query, 
-        user_name=process_req.user_name,           # Pass username
-        uploader_name=process_req.uploader_name,   # Pass uploader name
-        video_id=video_id,
-        s3_video_base_path=s3_video_base_path,
-        s3_json_path=s3_json_path,
-        s3_interactions_path=s3_interactions_path,
-        s3_bucket=s3_bucket,
-        interaction_data=interaction # Pass the whole dict
-    )
-
-    return ProcessingStartedResponse(
-        status="Full video processing and query started",
-        video_id=video_id,
         interaction_id=interaction_id
     )
 
@@ -284,8 +230,7 @@ async def get_query_status(video_id: str):
     except FileNotFoundError:
         # Metadata doesn't exist (yet or failed very early). This is common for new submissions.
         print(f"Metadata file not found for {video_id} at {s3_json_path}. Assuming 'processing' or not yet started.")
-        # We might still want to check for interactions if the metadata write failed but interactions started
-        processing_status = "PROCESSING" # Or UNKNOWN? Let's assume processing until proven otherwise
+        processing_status = "PROCESSING"
     except Exception as e:
         # Handle other errors fetching metadata (permissions, S3 issues)
         print(f"Error getting video metadata for {video_id}: {e}")
@@ -318,69 +263,6 @@ async def get_query_status(video_id: str):
         uploader_name=uploader_name, # Will be None if metadata wasn't fetched
         interactions=interactions # Will be empty list if not found or error
     )
-
-
-# --- NEW Like Endpoint ---
-@app.post("/api/videos/{video_id}/like", response_model=LikeResponse, tags=["Videos"])
-async def like_video(video_id: str):
-    """Increments the like count for a video in its S3 metadata JSON."""
-    print(f"Received like request for video_id: {video_id}")
-    s3_bucket = CONFIG["s3_bucket_name"]
-    s3_json_path = get_s3_json_path(video_id)
-    s3_client = boto3.client('s3',
-                             region_name=CONFIG['aws_region'],
-                             aws_access_key_id=CONFIG.get('aws_access_key_id'),
-                             aws_secret_access_key=CONFIG.get('aws_secret_access_key'))
-
-    try:
-        # --- Get current metadata ---
-        try:
-            response = s3_client.get_object(Bucket=s3_bucket, Key=s3_json_path)
-            metadata = json.loads(response['Body'].read().decode('utf-8'))
-            print(f"Current metadata fetched for {video_id}")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                print(f"Metadata file not found for liking {video_id} at {s3_json_path}")
-                raise HTTPException(status_code=404, detail=f"Video metadata not found for {video_id}. Cannot like.")
-            else:
-                print(f"S3 ClientError getting metadata for like: {e}")
-                raise HTTPException(status_code=500, detail="Failed to retrieve video metadata before liking.")
-        except json.JSONDecodeError:
-             print(f"Failed to decode metadata JSON for {video_id} before liking.")
-             raise HTTPException(status_code=500, detail="Failed to parse video metadata.")
-
-        # --- Increment like count ---
-        current_likes = metadata.get('like_count', 0)
-        # Ensure it's an integer, handle potential non-int values gracefully
-        if not isinstance(current_likes, int):
-            current_likes = 0
-        metadata['like_count'] = current_likes + 1
-        new_likes = metadata['like_count']
-        print(f"Incremented likes for {video_id} to {new_likes}")
-
-        # --- Write updated metadata back to S3 ---
-        # WARNING: This has a potential race condition if multiple users like simultaneously.
-        # For a demo, this is acceptable. Production needs atomic updates (e.g., DynamoDB).
-        try:
-             s3_client.put_object(
-                 Bucket=s3_bucket,
-                 Key=s3_json_path,
-                 Body=json.dumps(metadata, indent=2), # Pretty print for readability
-                 ContentType='application/json'
-             )
-             print(f"Successfully updated metadata for {video_id} with new like count.")
-        except ClientError as e:
-            print(f"S3 ClientError putting updated metadata for like: {e}")
-            # Don't revert the in-memory count, just report failure
-            raise HTTPException(status_code=500, detail="Failed to save updated like count.")
-
-        return LikeResponse(like_count=new_likes)
-
-    except Exception as e:
-        # Catch-all for unexpected errors during the like process
-        print(f"Unexpected error liking video {video_id}: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred while processing the like.")
-
 
 # --- Optional: Run directly (uvicorn recommended) ---
 # if __name__ == "__main__":

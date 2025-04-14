@@ -25,11 +25,8 @@ from pinecone.exceptions import PineconeException
 # from mcp.client.stdio import stdio_client # legacy import
 # from mcp import McpError # REMOVED (FastMCP might have different error types)
 
-# --- EDIT: Replace MCP imports with FastMCP ---
-from fastmcp import Client as FastMCPClient # ADD - aliased to avoid name clash if needed
-from fastmcp.client.transports import SSETransport # ADD
-# from fastmcp.typing import TextContent # REMOVE - Module doesn't exist
-# --- END EDIT ---
+from fastmcp import Client as FastMCPClient
+from fastmcp.client.transports import SSETransport
 
 # Import Anthropic specific exceptions
 from anthropic import APIError as AnthropicAPIError
@@ -477,9 +474,6 @@ A user is asking a question about a video. This video context details specific o
 """ 
     return intermediate_prompt
 
-# --- MCP Interaction & Answer Synthesis --- (Integrated from mcp_client.py)
-
-# Rule-based tool selection logic (adapted from mcp_client.py)
 def _select_perplexity_tool_rule_based(query: str) -> str:
     """Selects the appropriate Perplexity tool based on the query content using heuristics."""
     query_lower = query.lower()
@@ -516,7 +510,7 @@ def _select_perplexity_tool_rule_based(query: str) -> str:
         return "perplexity_ask"
 
 # LLM-based tool selection and execution logic
-# --- EDIT: Update _select_and_run_tool_llm_based --- 
+# Always use this to properly leverage Model Context Protocol
 async def _select_and_run_tool_llm_based(
     client: FastMCPClient, # Changed from ClientSession
     query_context: str,
@@ -619,28 +613,9 @@ async def _select_and_run_tool_llm_based(
         tool_result_text = f"[Unexpected error during LLM-based tool process: {e}]"
 
     return tool_result_text
-# --- END EDIT --- 
-
-# --- EDIT: Add dummy notification handler --- 
-# def handle_notification(notification: dict):
-#     """Handles incoming notifications, logs warnings for unexpected ones."""
-#     method = notification.get("method")
-#     # Log unexpected notifications but don't crash
-#     if method and not method.startswith((
-#         "notifications/cancelled", 
-#         "notifications/progress", 
-#         "notifications/message", 
-#         "notifications/resources/updated",
-#         "notifications/resources/list_changed",
-#         "notifications/tools/list_changed",
-#         "notifications/prompts/list_changed"
-#     )):
-#         print(f"WARN: Received unexpected notification method '{method}': {notification.get('params')}")
-# --- END EDIT --- 
 
 async def _call_mcp(
     intermediate_prompt: str,
-    mcp_server_name: str = "perplexity-ask",
     use_llm_selection: bool = True # Default set back to True
 ) -> str:
     """Connects to the configured MCP server URL via SSE/HTTP using FastMCP,
@@ -753,7 +728,7 @@ async def _call_mcp(
 
 def _synthesize_answer(user_query: str, video_context: str, mcp_result: str) -> str:
     """Synthesizes the final answer using OpenAI, combining the original query,
-       video context (already included in full_context), and the MCP result.
+       video context, and the MCP result.
     """
     print("Synthesizing final answer using OpenAI...")
     if not OPENAI_CLIENT:
@@ -763,9 +738,6 @@ def _synthesize_answer(user_query: str, video_context: str, mcp_result: str) -> 
     synthesis_model = CONFIG.get("openai_synthesis_model", "gpt-4o-mini")
 
     # Construct the prompt for the synthesis model
-    # The `full_context` variable already contains the User Query, Video Summary, Themes, and Relevant Clips.
-    # We just need to add the MCP result as Additional Information.
-    # Modify this prompt structure as needed for optimal results.
     prompt = f"""
 **Task:**
 Please answer the user query comprehensively by synthesizing relevant information from **both** the Video Context (details extracted directly from the video) and the relevant Internet Search Results provided below.
@@ -806,8 +778,6 @@ Please answer the user query comprehensively by synthesizing relevant informatio
         completion = OPENAI_CLIENT.chat.completions.create(
             model=synthesis_model,
             messages=[
-                # Note: Providing the entire combined text as a single user message.
-                # You could experiment with different roles or structuring if needed.
                 {"role": "user", "content": prompt}
             ]
         )
@@ -825,20 +795,17 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 
 
 
-# --- Background Task Implementations --- (Updated)
-
 async def run_query_pipeline_async(
     video_id: str,
     user_query: str,
-    user_name: str, # ADDED argument
+    user_name: str,
     interaction_id: str,
     s3_json_path: str,
     s3_interactions_path: str,
     s3_bucket: str,
-    interaction_data: Dict[str, Any] # ADDED argument
+    interaction_data: Dict[str, Any]
 ):
     """Background task to answer a query for a PROCESSED video."""
-    # Note: user_name and query_timestamp are already in initial_interaction_data
     print(f"BACKGROUND TASK: Starting query pipeline for interaction {interaction_data.get('interaction_id')} by user '{user_name}' on video {video_id}")
     start_time = time.time()
 
@@ -890,125 +857,3 @@ async def run_query_pipeline_async(
     finally:
         end_time = time.time()
         print(f"BACKGROUND TASK: Query pipeline for interaction {interaction_id} finished in {end_time - start_time:.2f} seconds.")
-
-
-async def run_full_pipeline_async(
-    video_url: str,
-    user_query: str, # Changed from initial_user_query to match main.py call
-    user_name: str, # ADDED argument
-    uploader_name: Optional[str], # ADDED argument
-    video_id: str,
-    s3_video_base_path: str,
-    s3_json_path: str,
-    s3_interactions_path: str,
-    s3_bucket: str,
-    interaction_data: Dict[str, Any] # ADDED argument
-):
-    """Background task to process a NEW video and then answer a query."""
-    interaction_id = interaction_data.get('interaction_id') # Get ID from passed data
-    print(f"BACKGROUND TASK: Starting full pipeline for video {video_id} (uploader: {uploader_name}) by user '{user_name}' with interaction {interaction_id}")
-    start_time = time.time()
-    full_video_metadata = None
-
-    try:
-        # 1. Create initial metadata file with uploader and zero likes
-        initial_metadata = {
-            "video_id": video_id,
-            "source_url": video_url,
-            "uploader_name": uploader_name, # ADDED
-            "like_count": 0, # ADDED - Initialize likes to 0
-            "processing_status": "PROCESSING",
-            "processing_start_time": datetime.now(timezone.utc).isoformat()
-            # TODO: Consider extracting actual like count during download if possible
-        }
-        S3_CLIENT.put_object(
-            Bucket=s3_bucket,
-            Key=s3_json_path,
-            Body=json.dumps(initial_metadata, indent=2),
-            ContentType='application/json'
-        )
-        print(f"Created initial metadata at s3://{s3_bucket}/{s3_json_path} with uploader '{uploader_name}'")
-
-        # 2. Add initial interaction using the provided data structure
-        # This includes user_name, query, timestamp, status='processing'
-        add_interaction_to_s3(s3_bucket, s3_interactions_path, interaction_data)
-        print(f"Added initial interaction record: {interaction_data}")
-
-        # --- Video Processing Steps ---
-        print("DEBUG: Starting video processing steps...")
-        # TODO: Handle /tmp path more robustly (e.g., use tempfile module)
-        local_video_path = _download_video(video_url, f"/tmp/{video_id}.mp4")
-        _upload_to_s3(local_video_path, s3_bucket, f"{s3_video_base_path}.mp4")
-        chunks_metadata = _chunk_video(f"{s3_video_base_path}.mp4", s3_bucket)
-        chunks_with_captions, overall_summary, key_themes = _generate_captions_and_summary(
-            chunks_metadata, s3_video_base_path, s3_bucket
-        )
-        _index_captions(video_id, chunks_with_captions)
-        print("DEBUG: Video processing steps complete.")
-
-        # --- Finalize Metadata ---
-        # This is the complete metadata after processing
-        # Re-include uploader_name and like_count for completeness
-        full_video_metadata = {
-            "video_id": video_id,
-            "source_url": video_url,
-            "uploader_name": uploader_name, # Included again
-            "like_count": 0, # Included again (still 0 unless updated elsewhere)
-            "processing_status": "FINISHED", # Mark as finished *before* query handling
-            "processing_complete_time": datetime.now(timezone.utc).isoformat(),
-            "overall_summary": overall_summary,
-            "key_themes": key_themes,
-            "chunks": chunks_with_captions,
-            # TODO: Add total_duration and num_chunks if available
-        }
-        S3_CLIENT.put_object(
-            Bucket=s3_bucket,
-            Key=s3_json_path,
-            Body=json.dumps(full_video_metadata, indent=2),
-            ContentType='application/json'
-        )
-        print(f"Updated metadata with status FINISHED at s3://{s3_bucket}/{s3_json_path}")
-
-        # --- Handle the Query ---
-        print("DEBUG: Starting query handling...")
-        # Retrieve relevant chunks
-        retrieved_chunks = _retrieve_relevant_chunks(video_id, user_query)
-
-        # Assemble video context and intermediate prompt
-        video_context = _assemble_video_context(retrieved_chunks, full_video_metadata)
-        intermediate_prompt = _assemble_intermediate_prompt(video_context, user_query)
-        print(f"Generated intermediate prompt (length: {len(intermediate_prompt)} chars)")
-
-        # Call MCP
-        print("DEBUG: Calling _call_mcp function...")
-        # Use LLM selection by default
-        mcp_result = await _call_mcp(intermediate_prompt, use_llm_selection=True)
-        print(f"Received MCP result (length: {len(mcp_result)} chars)")
-
-        # Synthesize answer
-        final_answer = _synthesize_answer(user_query, video_context, mcp_result)
-        print(f"Synthesized final answer (length: {len(final_answer)} chars)")
-
-        # Update interaction status to completed
-        update_interaction_status_in_s3(
-            s3_bucket, s3_interactions_path, interaction_id, "completed",
-            final_answer=final_answer,
-            answer_timestamp=datetime.now(timezone.utc).isoformat()
-        )
-        print(f"BACKGROUND TASK: Full pipeline for {video_id} with interaction {interaction_id} COMPLETED.")
-
-    except Exception as e:
-        print(f"BACKGROUND TASK ERROR: Full pipeline for {video_id} with interaction {interaction_id} FAILED: {e}")
-        import traceback
-        traceback.print_exc() # Print full traceback for debugging
-        try:
-            # Mark overall status as failed if metadata file likely exists
-            update_overall_processing_status(s3_bucket, s3_json_path, "FAILED")
-            # Always try to update interaction status
-            update_interaction_status_in_s3(s3_bucket, s3_interactions_path, interaction_id, "failed")
-        except Exception as update_e:
-            print(f"BACKGROUND TASK ERROR: Failed to update status to failed: {update_e}")
-    finally:
-        end_time = time.time()
-        print(f"BACKGROUND TASK: Full pipeline for {video_id} finished in {end_time - start_time:.2f} seconds.")
-

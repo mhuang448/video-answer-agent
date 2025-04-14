@@ -4,11 +4,6 @@ import { FastMCP, UserError, FastMCPSession, Context } from "fastmcp";
 import { z } from "zod";
 import dotenv from "dotenv";
 
-// --- EDIT: Remove Global Error Handlers (rely on session handler for now) ---
-// process.on("uncaughtException", ...);
-// process.on("unhandledRejection", ...);
-// --- END EDIT ---
-
 dotenv.config();
 
 /**
@@ -119,7 +114,6 @@ async function performChatCompletion(
       `${logPrefix} Perplexity API error: ${response.status} ${response.statusText}`,
       errorText
     );
-    // Re-throw a more specific error
     throw new Error(
       `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
     );
@@ -133,7 +127,6 @@ async function performChatCompletion(
       `${logPrefix} Failed to parse JSON response from Perplexity API:`,
       jsonError
     );
-    // Re-throw a more specific error
     throw new Error(
       `Failed to parse JSON response from Perplexity API: ${
         jsonError instanceof Error ? jsonError.message : String(jsonError)
@@ -227,7 +220,6 @@ server.addTool({
       // Throw UserError to send clean error to client
       throw new UserError(`Failed to execute ${toolName}: ${errorMessage}`);
     }
-    // --- END EDIT ---
   },
 });
 console.log("INFO: Tool 'perplexity_ask' added.");
@@ -242,7 +234,6 @@ server.addTool({
     args: z.infer<typeof toolInputSchema>,
     context: Context<undefined>
   ) => {
-    // --- EDIT: Use context.log for logging ---
     const toolName = "perplexity_reason";
     context.log.info(`Executing tool: ${toolName}`);
     try {
@@ -268,7 +259,6 @@ server.addTool({
       });
       throw new UserError(`Failed to execute ${toolName}: ${errorMessage}`);
     }
-    // --- END EDIT ---
   },
 });
 console.log("INFO: Tool 'perplexity_reason' added.");
@@ -308,7 +298,6 @@ try {
   process.exit(1);
 }
 
-// --- EDIT: Refined Error/Disconnect Handling ---
 // Use a WeakSet to track sessions we're already trying to close due to error
 const closingSessions = new WeakSet<FastMCPSession<undefined>>();
 
@@ -370,4 +359,3 @@ server.on("disconnect", (event: { session: FastMCPSession<undefined> }) => {
     console.warn("Disconnect event received but session object was undefined.");
   }
 });
-// --- END EDIT ---
