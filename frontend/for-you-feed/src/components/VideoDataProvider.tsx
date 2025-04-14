@@ -29,7 +29,6 @@ const VideoDataProvider = {
         return [];
       }
 
-      // Log that we're fetching fresh data
       console.log("Fetched fresh videos from API");
 
       return await response.json();

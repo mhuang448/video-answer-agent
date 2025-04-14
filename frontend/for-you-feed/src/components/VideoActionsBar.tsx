@@ -11,7 +11,6 @@ type VideoActionsBarProps = {
   onCommentClick: (videoId: string) => void; // Callback function when comment button is clicked
 };
 
-// Reusable Icon Component for Clarity
 const CommentIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -29,12 +28,10 @@ const CommentIcon = () => (
 
 const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
   videoId,
-  //   commentCount,
   onCommentClick,
 }) => {
   const handleCommentClick = () => {
     console.log(`Comment button clicked for video ${videoId}`);
-    // Call the passed-in handler
     onCommentClick(videoId);
   };
 
@@ -58,13 +55,6 @@ const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
         <div className="w-12 h-12 flex items-center justify-center rounded-full bg-black/30 backdrop-blur-sm hover:bg-white/20 transition-colors duration-200">
           <CommentIcon />
         </div>
-
-        {/* Comment count display - conditionally rendered
-        {commentCount !== undefined && (
-          <span className="text-xs font-medium mt-1 text-white">
-            {formatCount(commentCount)}
-          </span>
-        )} */}
       </button>
       {/* Future buttons (Like, Share, Bookmark) would go here */}
       {/* Example structure:

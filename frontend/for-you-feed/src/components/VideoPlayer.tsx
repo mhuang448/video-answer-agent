@@ -233,7 +233,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </p>
       </div>
 
-      {/* Progress Bar - Now clickable */}
+      {/* Progress Bar */}
       <div
         className="absolute bottom-0 left-0 w-full h-[6px] bg-gray-200 bg-opacity-40 cursor-pointer pointer-events-auto"
         onClick={handleSeek}

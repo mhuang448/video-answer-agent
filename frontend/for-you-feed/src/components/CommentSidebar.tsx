@@ -89,7 +89,6 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
   const isPollingActive = useRef(false); // Prevent multiple intervals
   const commentListRef = useRef<HTMLDivElement>(null); // Ref for scrolling
 
-  // TODO: Later, fetch actual comments for the videoId when the sidebar opens
   useEffect(() => {
     if (isOpen) {
       console.log(`Comment sidebar opened for video: ${videoId}`);
@@ -104,8 +103,6 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
   const fetchStatus = async () => {
     if (!videoId) return;
     // console.log(`Polling status for video: ${videoId}`); // Log polling attempt
-    // Don't set isLoading to true for polling to avoid constant flashing
-    // setIsLoading(true);
     setError(null);
     try {
       // Call the Next.js API route handler

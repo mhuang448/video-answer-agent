@@ -15,11 +15,10 @@ from .models import (
     ProcessingStartedResponse, StatusResponse, LikeResponse
 )
 from .utils import (
-    CONFIG, get_s3_json_path, get_s3_interactions_path
+    CONFIG, get_s3_json_path, get_s3_interactions_path, get_video_metadata_from_s3, get_interactions_from_s3
 )
 from .pipeline_logic import (
     run_query_pipeline_async,
-    get_video_metadata_from_s3, get_interactions_from_s3
 )
 
 # --- FastAPI App Setup ---

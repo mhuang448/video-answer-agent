@@ -1,8 +1,8 @@
-# Perplexity MCP Server
+# SSE-Enabled Perplexity MCP Server
 
 (FastMCP Node.js MCP Server)
 
-An MCP server implementation using **FastMCP** that integrates the Perplexity Sonar API to provide clients (like our Python backend) with real-time, web-wide research and reasoning capabilities via **Server-Sent Events (SSE)**.
+An MCP server implementation using **FastMCP** that integrates the Perplexity Sonar API to provide MCP clients (like our Python backend) with real-time, web-wide research and reasoning capabilities via **Server-Sent Events (SSE)**.
 
 This server is built with Node.js and TypeScript, using the `fastmcp` library for the core MCP functionality.
 
@@ -47,7 +47,7 @@ The server exposes the following tools, which the Python backend can call using 
   - **Output:** A string containing the chat completion result from Perplexity.
   - **Underlying API Call:** `performChatCompletion(messages, "sonar-reasoning-pro")`.
 
-_(Note: A `perplexity_research` tool to query Perplexity's `sonar-deep-research` model can also be used, but omitted for latency optimization)._
+_(Note: A `perplexity_research` tool to query Perplexity's `sonar-deep-research` model was also included in original perplexity-ask MCP Server, but omitted for latency optimization)._
 
 ## Resources Exposed via FastMCP
 

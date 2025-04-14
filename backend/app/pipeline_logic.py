@@ -1,30 +1,25 @@
 # app/pipeline_logic.py
 import time
 import json
-import asyncio # Added for MCP async operations
-from contextlib import AsyncExitStack # Added for MCP connection management
-from datetime import datetime, timezone
-from botocore.exceptions import ClientError
-from typing import List, Dict, Any, Tuple, Optional # Added List, Dict, Any, Tuple, Optional
+import asyncio
+from typing import List, Dict, Any
 
 # Import helper functions and clients from utils
 from .utils import (
-    S3_CLIENT, CONFIG, get_s3_json_path, get_s3_interactions_path,
+    S3_CLIENT, CONFIG,
     OPENAI_CLIENT, PINECONE_INDEX,
-    ANTHROPIC_CLIENT, # Added Anthropic client (optional)
-    # get_mcp_server_params, # Added MCP helper function (deprecated due to switch from JSON to SSE URL)
+    ANTHROPIC_CLIENT,
+    get_video_metadata_from_s3,
+    add_interaction_to_s3,
+    update_interaction_status_in_s3,
 )
 from .models import VideoMetadata, Interaction # Import Pydantic models for structure
 
 # Import specific exceptions for better handling
 from openai import OpenAIError
 from pinecone.exceptions import PineconeException
-# Import MCP components
-# from mcp import ClientSession
-# from mcp.client.sse import sse_client # legacy import
-# from mcp.client.stdio import stdio_client # legacy import
-# from mcp import McpError # REMOVED (FastMCP might have different error types)
 
+# Import FastMCP client and transport
 from fastmcp import Client as FastMCPClient
 from fastmcp.client.transports import SSETransport
 
@@ -33,287 +28,7 @@ from anthropic import APIError as AnthropicAPIError
 # Import httpx exceptions for sse_client error handling
 import httpx
 
-from pprint import pprint # for debugging
-from collections.abc import Mapping # for debugging
-import inspect # for debugging
-
-# Placeholder imports for AI clients - replace with actual imports
-# import pinecone
-# import openai
-
-
-def deep_vars(obj, visited=None):
-    if visited is None:
-        visited = set()
-
-    # Prevent circular references
-    if id(obj) in visited:
-        return "<Circular Reference>"
-    visited.add(id(obj))
-
-    # If the object is a mapping (like a dict)
-    if isinstance(obj, Mapping):
-        return {k: deep_vars(v, visited) for k, v in obj.items()}
-    # If the object has a __dict__ attribute, process its attributes
-    elif hasattr(obj, '__dict__'):
-        # Optionally, filter out "private" attributes (those beginning with an underscore)
-        result = {}
-        for key, value in vars(obj).items():
-            if key.startswith('_'):
-                continue  # Skip private attributes; remove this check if you want them too.
-            result[key] = deep_vars(value, visited)
-        return result
-    # If the object is a list, tuple, or set, iterate through its items
-    elif isinstance(obj, (list, tuple, set)):
-        return type(obj)(deep_vars(item, visited) for item in obj)
-    else:
-        return obj  # Base case: return the object as is
-
-# --- S3 JSON Read/Write Helpers (Crucial for State) ---
-
-def get_video_metadata_from_s3(bucket: str, key: str) -> dict:
-    """Reads the JSON metadata file from S3 and returns it as a dict."""
-    try:
-        response = S3_CLIENT.get_object(Bucket=bucket, Key=key)
-        content = response['Body'].read().decode('utf-8')
-        data = json.loads(content)
-        print(f"Successfully read metadata from s3://{bucket}/{key}")
-        return data
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
-            print(f"S3 Key not found: s3://{bucket}/{key}")
-            raise FileNotFoundError(f"Metadata file not found at {key}")
-        else:
-            print(f"Error reading from S3 s3://{bucket}/{key}: {e}")
-            raise
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from s3://{bucket}/{key}: {e}")
-        raise ValueError("Invalid JSON content in S3 file")
-    except Exception as e:
-        print(f"Unexpected error reading metadata from s3://{bucket}/{key}: {e}")
-        raise
-
-def get_interactions_from_s3(s3_bucket: str, s3_interactions_key: str) -> List[Dict[str, Any]]:
-    """Fetches the list of interactions from the interactions JSON file in S3."""
-    try:
-        response = S3_CLIENT.get_object(Bucket=s3_bucket, Key=s3_interactions_key)
-        content = response['Body'].read().decode('utf-8')
-        interactions = json.loads(content)
-        if not isinstance(interactions, list):
-             print(f"Warning: Interactions data at {s3_interactions_key} is not a list. Returning empty.")
-             return []
-        # Validate structure slightly - ensure items are dicts (optional but good practice)
-        # interactions = [item for item in interactions if isinstance(item, dict)]
-        return interactions
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
-             print(f"Interactions file not found at {s3_interactions_key}. Returning empty list.")
-             return [] # Return empty list if file doesn't exist yet
-        else:
-            print(f"Error getting interactions from S3 ({s3_interactions_key}): {e}")
-            raise # Re-raise other S3 errors
-    except json.JSONDecodeError as e:
-        print(f"Error decoding interactions JSON from S3 ({s3_interactions_key}): {e}")
-        # Decide how to handle corrupted JSON, maybe return empty list or raise?
-        # Returning empty might be safer for polling.
-        return []
-    except Exception as e:
-        print(f"Unexpected error reading interactions from S3 ({s3_interactions_key}): {e}")
-        # Consider logging the error more formally
-        return [] # Return empty list on unexpected errors as well for polling robustness
-
-def add_interaction_to_s3(s3_bucket: str, s3_interactions_key: str, new_interaction_data: Dict[str, Any]):
-    """Adds a new interaction object to the interactions JSON file in S3."""
-    # Read-modify-write with basic error handling for file existence/format.
-    # WARNING: Potential race condition if multiple queries arrive near-simultaneously.
-    try:
-        # Fetch existing interactions, defaulting to an empty list if not found or invalid.
-        interactions = get_interactions_from_s3(s3_bucket, s3_interactions_key)
-
-        # Append the new interaction dictionary.
-        # Ensure the passed 'new_interaction_data' contains all required fields like
-        # 'interaction_id', 'user_name', 'user_query', 'query_timestamp', 'status'.
-        interactions.append(new_interaction_data)
-
-        # Write the updated list back to S3
-        S3_CLIENT.put_object(
-            Bucket=s3_bucket,
-            Key=s3_interactions_key,
-            Body=json.dumps(interactions, indent=2), # Use indent for readability
-            ContentType='application/json'
-        )
-        print(f"Successfully added interaction {new_interaction_data.get('interaction_id')} to {s3_interactions_key}")
-
-    except ClientError as e:
-        # Catch S3 errors specifically during the put_object call
-        print(f"S3 ClientError putting updated interactions to {s3_interactions_key}: {e}")
-        raise # Re-raise S3 errors during write
-    except Exception as e:
-        # Catch other unexpected errors during the add process
-        print(f"Unexpected error adding interaction to S3 ({s3_interactions_key}): {e}")
-        raise
-
-def update_interaction_status_in_s3(s3_bucket: str, s3_interactions_key: str, interaction_id: str, new_status: str, ai_answer: Optional[str] = None):
-    """Updates status and optionally ai_answer for a specific interaction in S3."""
-    # Read-modify-write logic.
-    # WARNING: Potential race condition.
-    try:
-        # Fetch existing interactions. If file is invalid/not found, this will return [] or raise.
-        interactions = get_interactions_from_s3(s3_bucket, s3_interactions_key)
-
-        if not interactions:
-             print(f"Warning: Interactions file {s3_interactions_key} is empty or missing. Cannot update status for {interaction_id}.")
-             # If the file was missing, we can't update. If it was empty, the loop below won't run.
-             # We might choose to raise an error here depending on expected behavior.
-             # For now, just log and return, preventing the put_object call.
-             return # Exit early
-
-        # Find and update the interaction in the list
-        interaction_found = False
-        updated_interactions = [] # Build a new list to ensure clean data
-        for interaction in interactions:
-            # Check if it's a dictionary and the ID matches
-            if isinstance(interaction, dict) and interaction.get('interaction_id') == interaction_id:
-                # Create a copy to modify, preserving original fields
-                updated_interaction = interaction.copy()
-                updated_interaction['status'] = new_status
-                updated_interaction['answer_timestamp'] = datetime.now(timezone.utc).isoformat()
-                if ai_answer is not None:
-                    updated_interaction['ai_answer'] = ai_answer
-                updated_interactions.append(updated_interaction)
-                interaction_found = True
-                print(f"Prepared update for interaction {interaction_id} status to {new_status}.")
-            elif isinstance(interaction, dict):
-                # Keep other valid interactions
-                updated_interactions.append(interaction)
-            # else: skip invalid entries if any
-
-        if not interaction_found:
-            print(f"Warning: Interaction ID {interaction_id} not found in {s3_interactions_key}. No status update performed.")
-            # No need to write back if nothing changed
-            return
-
-        # Write the updated list back to S3
-        S3_CLIENT.put_object(
-            Bucket=s3_bucket,
-            Key=s3_interactions_key,
-            Body=json.dumps(updated_interactions, indent=2),
-            ContentType='application/json'
-        )
-        print(f"Successfully saved updated interactions to {s3_interactions_key} after status update for {interaction_id}.")
-
-    except ClientError as e:
-        print(f"S3 ClientError putting updated interactions (status update) to {s3_interactions_key}: {e}")
-        raise
-    except Exception as e:
-        print(f"Unexpected error updating interaction status in S3 ({s3_interactions_key}): {e}")
-        raise
-
-def update_overall_processing_status(bucket: str, key: str, overall_status: str):
-    """Reads the S3 JSON, updates the top-level processing_status, writes it back."""
-    print(f"Updating overall status for {key} to {overall_status}")
-    retries = 3
     
-    for attempt in range(retries):
-        try:
-            # 1. GET current JSON
-            try:
-                metadata = get_video_metadata_from_s3(bucket, key)
-            except FileNotFoundError:
-                # If file doesn't exist, create a minimal one
-                metadata = {"processing_status": "PROCESSING"}
-            
-            # 2. Update status
-            metadata["processing_status"] = overall_status
-            
-            # 3. PUT updated JSON back
-            S3_CLIENT.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=json.dumps(metadata, indent=2),
-                ContentType='application/json'
-            )
-            print(f"Successfully updated status to {overall_status} in s3://{bucket}/{key}")
-            return  # Success, exit retry loop
-            
-        except ClientError as e:
-            print(f"S3 ClientError on attempt {attempt + 1} updating status in {key}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
-            
-        except Exception as e:
-            print(f"Error updating status in {key} on attempt {attempt + 1}: {e}")
-            if attempt == retries - 1: 
-                raise  # Raise after last attempt
-            time.sleep(2 ** attempt)  # Exponential backoff
-
-# --- Placeholder Functions for Pipeline Steps ---
-
-def _download_video(video_url: str, local_path: str):
-    print(f"Placeholder: Downloading {video_url} to {local_path}...")
-    time.sleep(2) # Simulate download time
-    # TODO: Implement actual download using yt-dlp or requests
-    # see code in backend/technical-pipeline-scripts/download_from_url.py
-    print("Placeholder: Download complete.")
-    # Return path to downloaded file
-    return local_path
-
-def _upload_to_s3(local_path: str, bucket: str, s3_key: str):
-    print(f"Placeholder: Uploading {local_path} to s3://{bucket}/{s3_key}...")
-    # TODO: Implement S3 upload using S3_CLIENT.upload_file
-    # see code in backend/upload_single_video_data.py
-    time.sleep(1)
-    print("Placeholder: Upload complete.")
-
-def _chunk_video(video_s3_key: str, bucket: str) -> list:
-    print(f"Placeholder: Chunking video s3://{bucket}/{video_s3_key}...")
-    time.sleep(5) # Simulate chunking time
-    # TODO: Implement chunking
-    # see code in backend/technical-pipeline-scripts/chunk_by_scenes.py
-    #   - Download video from S3 (or stream)
-    #   - Use PySceneDetect or ffmpeg
-    #   - Upload chunks to S3 (e.g., under /chunks/ prefix)
-    #   - Generate chunk metadata (start/end times, names, etc.)
-    print("Placeholder: Chunking complete.")
-    # Return list of chunk metadata dictionaries
-    return [
-        {"chunk_name": "chunk1.mp4", "start_timestamp": "00:00.000", "end_timestamp": "00:04.000", "metadata_1": "metadata_1_content", "metadata_2": "metadata_2_content"},
-        {"chunk_name": "chunk2.mp4", "start_timestamp": "00:04.000", "end_timestamp": "00:08.000", "metadata_1": "metadata_1_content", "metadata_2": "metadata_2_content"}
-    ] # Example
-
-def _generate_captions_and_summary(chunks_metadata: list, video_s3_base_path: str, bucket: str) -> tuple[list, str, list]:
-     print("Placeholder: Generating captions and summary...")
-     time.sleep(10) # Simulate AI calls
-     # TODO: Implement caption/summary generation
-     # see code in backend/technical-pipeline-scripts/caption_chunks_and_summarize.py
-     #   - For each chunk:
-     #     - Download chunk from S3 (or use presigned URL)
-     #     - Call Gemini API to generate caption
-     #     - Update the corresponding chunk metadata dict with the caption
-     #   - Concatenate all captions
-     #   - Call OpenAI API to generate overall summary and key themes
-     updated_chunks_metadata = chunks_metadata # Add captions to this list
-     overall_summary = "This is a placeholder summary."
-     key_themes = ["placeholder", "example"]
-     print("Placeholder: Captioning/Summarization complete.")
-     return updated_chunks_metadata, overall_summary, key_themes
-
-def _index_captions(video_id: str, chunks_with_captions: list):
-    print(f"Placeholder: Indexing captions for {video_id}...")
-    time.sleep(3) # Simulate embedding/indexing
-    # TODO: Implement indexing
-    # see code in backend/technical-pipeline-scripts/index_and_retrieve.py
-    #   - Initialize Pinecone client
-    #   - For each chunk with a caption:
-    #     - Get caption text
-    #     - Call OpenAI Embedding API
-    #     - Prepare vector object (id=chunk_name, values=embedding, metadata={video_id, caption_text, start, end,...})
-    #     - Upsert vectors to Pinecone in batches
-    print("Placeholder: Indexing complete.")
-
-
-# --- Retrieval and Context Assembly ---  (Integrated from index_and_retrieve.py)
 
 def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) -> List[Dict[str, Any]]:
     """Embeds the user query and retrieves relevant chunks from Pinecone,
@@ -826,7 +541,7 @@ async def run_query_pipeline_async(
         # 4. Assemble context (This now includes summary, themes, clips)
         video_context = _assemble_video_context(retrieved_chunks, video_metadata)
         intermediate_prompt = _assemble_intermediate_prompt(video_context, user_query)
-        print(f"===============\nINTERMEDIATE PROMPT:\n{intermediate_prompt[:500]}...\n===============")
+        print(f"===============\nINTERMEDIATE PROMPT:\n{intermediate_prompt}\n===============")
 
         # 5. Call MCP tool (using the assembled context + query)
         print("DEBUG: Calling _call_mcp function...")

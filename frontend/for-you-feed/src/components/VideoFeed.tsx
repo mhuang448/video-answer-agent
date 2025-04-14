@@ -17,8 +17,6 @@ interface VideoFeedProps {
  * Ensures only one video plays at a time using Intersection Observer
  */
 const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
-  // In a real app, you might fetch more videos on scroll, but
-  // for this example, we'll just use the initial set
   const [videos] = useState<VideoInfo[]>(initialVideos);
   // Track which video is currently active/visible
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
