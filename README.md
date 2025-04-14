@@ -6,7 +6,7 @@
 
 Video Processing & Knowledge Base Creation
 
-![Video Processing & Knowledge Base Creation](Video_processing_Pipeline.png)
+![Video Processing & Knowledge Base Creation](Video_Processing_Pipeline.png)
 
 AskAI RAG + MCP AI Agent
 
