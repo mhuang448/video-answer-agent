@@ -19,7 +19,7 @@ services:
   backend:
     container_name: backend-container # Optional: explicit name
     build:
-      context: ./backend # Path to the directory containing the Dockerfile
+      context: ./backend/app
       dockerfile: Dockerfile
     ports:
       - "8000:8000" # Map host port 8000 to container port 8000

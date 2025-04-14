@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+
+# utility script to clear all interactions.json files from S3, to prevent cluttering the bucket
+
 import boto3
 import os
 import sys

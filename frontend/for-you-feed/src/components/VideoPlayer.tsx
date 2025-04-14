@@ -106,6 +106,31 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, 300);
   }, []);
 
+  // Click handler for the progress bar to seek
+  const handleSeek = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      !videoRef.current ||
+      !videoRef.current.duration ||
+      isNaN(videoRef.current.duration)
+    ) {
+      return; // Video not ready or duration unknown
+    }
+    event.stopPropagation(); // Prevent triggering play/pause on the parent
+
+    const progressBar = event.currentTarget;
+    const clickX = event.nativeEvent.offsetX; // Position relative to the target element
+    const barWidth = progressBar.offsetWidth;
+
+    if (barWidth > 0) {
+      const seekFraction = clickX / barWidth;
+      const targetTime = seekFraction * videoRef.current.duration;
+      videoRef.current.currentTime = targetTime;
+
+      // Update progress state immediately for better UI feedback
+      setProgress(seekFraction);
+    }
+  }, []); // Empty dependency array: only uses refs and doesn't depend on other state/props
+
   // Effect to automatically play or pause video based on isActive prop
   useEffect(() => {
     if (!videoRef.current) return;
@@ -208,10 +233,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </p>
       </div>
 
-      {/* Progress Bar */}
-      <div className="absolute bottom-0 left-0 w-full h-[6px] bg-gray-200 bg-opacity-40 pointer-events-none">
+      {/* Progress Bar - Now clickable */}
+      <div
+        className="absolute bottom-0 left-0 w-full h-[6px] bg-gray-200 bg-opacity-40 cursor-pointer pointer-events-auto"
+        onClick={handleSeek}
+        role="slider"
+        aria-label="Video progress bar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+      >
         <div
-          className="h-full bg-red-500 transition-all duration-100 ease-linear"
+          className="h-full bg-red-500 transition-all duration-100 ease-linear pointer-events-none" // Inner bar should not capture clicks
           style={{ width: `${progress * 100}%` }}
         />
       </div>

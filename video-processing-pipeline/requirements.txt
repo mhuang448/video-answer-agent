@@ -1,0 +1,23 @@
+# ===============================
+# for process_video_pipeline.py
+# ===============================
+# Video processing and scene detection
+yt-dlp # For downloading videos (specify a recent version or latest)
+scenedetect # PySceneDetect for scene detection and video splitting (requires ffmpeg)
+opencv-python # for video processing
+
+# API Clients and dependencies
+google-genai # For Gemini API (captioning)
+google-api-core # For Google API client
+openai # For OpenAI API (summarization, embeddings)
+pinecone[grpc] # For Pinecone API (vector indexing - using v3 gRPC based on code)
+python-dotenv # For loading environment variables from .env file
+
+# IMPORTANT: ffmpeg must be installed separately on the system.
+# https://ffmpeg.org/download.html
+
+
+# ===============================
+# for s3_upload_all_video_data.py
+# ===============================
+boto3

@@ -27,17 +27,6 @@ const CommentIcon = () => (
   </svg>
 );
 
-// Helper function to format numbers (e.g., 1.5K, 1.2M)
-const formatCount = (count: number): string => {
-  if (count >= 1000000) {
-    return `${(count / 1000000).toFixed(1)}M`;
-  }
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}K`;
-  }
-  return count.toString();
-};
-
 const VideoActionsBar: React.FC<VideoActionsBarProps> = ({
   videoId,
   //   commentCount,

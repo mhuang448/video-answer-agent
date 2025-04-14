@@ -20,7 +20,7 @@ This system operates via two primary workflows: preparing video content and answ
 
 **1. Video Processing & Knowledge Base Creation (Pre-computation)**
 
-- _This process happens **before** a video appears on the main feed. Scripts to accomplish this are in the `/backend/technical_pipeline_scripts` folder_
+- _This process happens **before** a video appears on the main feed. Scripts to accomplish this are in the `/video-processing-pipeline` folder_
 - **Acquisition & Chunking:** Downloads video from URL, splits video into chunks intelligently (scene detection with PySceneDetect with fallback to fixed duration chunking), and stores important metadata about the video and chunks (timestamps, duration, chunk number, etc).
 - **Generating Chunk Captions and Overall Summary:** Generates detailed captions for each video chunk (using Gemini 2.5 Pro), then uses captions to query OpenAI to generate overall summary and extract key themes.
 - **Indexing for Retrieval:** Creates vector embeddings with OpenAI's `text-embedding-ada-002` from captions and indexes them in Pinecone along with relevant metadata, building a searchable knowledge base specific to the video.
@@ -47,7 +47,7 @@ This system operates via two primary workflows: preparing video content and answ
 2.  **Ask on Feed Video (`@AskAI`):**
     - Tap comment icon on a feed video.
     - Tag `@AskAI`, type question, submit.
-    - Continue browsing; the RAG+MCP answer generation runs in the background.
+    - Continue browsing; the RAG+MCP answer generation runs in the background. Answer will be ready within few seconds.
 3.  **View Answer:** Navigate to the relevant video's comment section and read the AI-generated reply.
 
 ## Architecture Overview
