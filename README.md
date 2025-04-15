@@ -30,7 +30,7 @@ This system operates via two primary workflows: processing video to build knowle
 
 ### **2. Real-time: Answering a Query (`@AskAI` on the Feed)**
 
-RAG + MCP Answer Generation Pipeline
+**RAG + MCP Answer Generation Pipeline**
 ![AskAI RAG+MCP AI Answer Agent](AskAI_RAG_MCP_Agent.png)
 
 - _This is triggered when a user tags `@AskAI` on a video from the main feed (which is already processed)._
@@ -59,17 +59,15 @@ RAG + MCP Answer Generation Pipeline
 
 ## Architecture Overview
 
-![Architecture Diagram Placeholder](AskAI_RAG_MCP_Agent.png)
-
-- **Frontend (Next.js / Vercel):** UI, interactions, API calls (TypeScript, Tailwind CSS, App Router).
-- **Backend (FastAPI / AWS App Runner):** API handling, background task management (distinct tasks for full processing vs. Q&A only), AI service orchestration (Python, Docker).
-- **Storage (AWS S3):** Stores raw videos, chunks, and JSON metadata (`metadata.json`, `interactions.json`). Public read for `.mp4`.
+- **Frontend (Next.js web application):** UI, user interactions, API calls to communicate with Backend
+- **Backend (FastAPI / Python):** API handling, background task management, AI RAG + MCP Pipeline for AI answer generation.
+- **Storage (AWS S3):** Stores raw videos, chunks, and JSON metadata (`<video_id>.json`, `interactions.json`).
 - **Vector DB (Pinecone):** Stores and searches video caption embeddings for RAG.
 - **AI Services:** Google Gemini (Captioning), OpenAI (Embedding, Summarization, Final Answer Synthesis), Anthropic Claude (Tool Orchestration), Perplexity (MCP Tools).
 
 ## Technology Stack
 
-- **Frontend:** Next.js 15+, TypeScript, React, Tailwind CSS
+- **Frontend:** Next.js 15+, TypeScript, React, Tailwind CSS, App Router
 - **Backend:** Python 3.10+, FastAPI, Uvicorn, Docker
 - **Cloud:** AWS (S3, App Runner, ECR), Vercel
 - **Database:** Pinecone (Vector DB)
