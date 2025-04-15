@@ -1,7 +1,5 @@
 # Video Answer Agent (FastAPI RAG + MCP Service)
 
-## Overview
-
 ## 1. Overview
 
 This document describes the Python backend service for the Video Answer Agent project, built using the **FastAPI** framework.
@@ -20,6 +18,10 @@ This document describes the Python backend service for the Video Answer Agent pr
   - User interactions (`interactions.json`): A list containing each question (`user_query`), status (`processing`, `completed`, `failed`), the AI answer (`ai_answer`), timestamps, and `user_name`. Stored separately to avoid conflicts during simultaneous updates.
 
 ## 2. Architecture & External Services
+
+### Diagram of RAG + MCP Answer Generation Pipeline
+
+![AskAI RAG+MCP AI Answer Agent](../../AskAI_RAG_MCP_Agent.png)
 
 The backend relies on several external services and components:
 

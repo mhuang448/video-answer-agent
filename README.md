@@ -1,18 +1,6 @@
 # Video Answer AI Agent (@AskAI Feature)
 
-**Video Walkthrough:** [Link to your ~2 min video demo]
-
-**Architecture Diagrams:**
-
-Video Processing & Knowledge Base Creation
-
-![Video Processing & Knowledge Base Creation](Video_Processing_Pipeline.png)
-
-AskAI RAG + MCP AI Agent
-
-![AskAI RAG+MCP AI Answer Agent](AskAI_RAG_MCP_Agent.png)
-
-_Note: This project is inspired by Perplexity's recent initiative to bring the @AskPerplexity feature to the TikTok For You page: ([Blog Post: Rebuilding TikTok in America](https://www.perplexity.ai/hub/blog/rebuilding-tiktok-in-america))_
+**Demo:** [Watch Here](https://drive.google.com/file/d/1vN5NG9629xjRAIErMd9mSAk38iwVm6b1/view?usp=sharing)
 
 ## Description
 
@@ -20,11 +8,17 @@ This application allows users to browse a vertical video feed (similar to TikTok
 
 It demonstrates a modern **agentic AI workflow** that leverages **Retrieval-Augmented Generation (RAG)** to extract relevant video context and **Model Context Protocol (MCP)** to communicate via **Server-Sent Events (SSE)** with our Perplexity MCP Server, executing live web search tools (`perplexity_ask` or `perplexity_reason`) powered by Perplexity's Sonar API. The video context and tool call result is synthesized along with the user query into a high quality prompt to an **OpenAI LLM**, which generates the final answer to return back to the user. The user sees the answer as a reply to their comment from the `@AskAI` account.
 
+_Note: This project is inspired by Perplexity's recent initiative to bring the @AskPerplexity feature to the TikTok For You page: ([Blog Post: Rebuilding TikTok in America](https://www.perplexity.ai/hub/blog/rebuilding-tiktok-in-america))_
+
 ## How It Works: The Two Core Flows
 
-This system operates via two primary workflows: preparing video content and answering questions about it.
+This system operates via two primary workflows: processing video to build knowledge base for RAG, and the agentic RAG + MCP Pipeline to answer questions about a specific video.
 
-**1. Video Processing & Knowledge Base Creation (Pre-computation)**
+### **1. Video Processing & Knowledge Base Creation (Pre-computation)**
+
+**Video Processing Pipeline Diagram:**
+
+![Video Processing & Knowledge Base Creation](Video_Processing_Pipeline.png)
 
 - _This process happens **before** a video appears on the main feed._
 
@@ -34,7 +28,10 @@ This system operates via two primary workflows: preparing video content and answ
 - **Indexing for Retrieval:** Creates vector embeddings with OpenAI's `text-embedding-ada-002` from captions and indexes them in Pinecone along with relevant metadata, building a searchable knowledge base specific to the video.
 - **Upload to S3:** Video data (.mp4 file for full video, .mp4 files for video chunks, <video_id>.json files with generated chunk captions, overall video summary, key themes, and key metadata about video/chunks) are uploaded into our S3 bucket. This S3 data, along with our Pinecone index, forms our knowledge base for retrieval augmented generation (RAG).
 
-**2. Real-time: Answering a Query (`@AskAI` on the Feed)**
+### **2. Real-time: Answering a Query (`@AskAI` on the Feed)**
+
+RAG + MCP Answer Generation Pipeline
+![AskAI RAG+MCP AI Answer Agent](AskAI_RAG_MCP_Agent.png)
 
 - _This is triggered when a user tags `@AskAI` on a video from the main feed (which is already processed)._
 - Read full details in `backend/app/BACKEND.md`
@@ -78,16 +75,6 @@ This system operates via two primary workflows: preparing video content and answ
 - **Database:** Pinecone (Vector DB)
 - **AI APIs:** OpenAI, Google Cloud (Gemini), Perplexity, Anthropic
 - **Protocols:** Model Context Protocol (MCP)
-
-## Meeting Take-Home Requirements
-
-- **Answer Engine:** Provides LLM answers to queries about videos.
-- **RAG:** Implemented using video captions indexed in Pinecone.
-- **LLM Response:** Uses `gpt-4o-mini` for synthesis, incorporating RAG/MCP context.
-- **Creative Theme:** Interactive Q&A on a video feed (`@AskAI`) + crafting a high quality knowledge base for each video (detailed scene captions indexed into Pinecone VectorDB plus overall summary and key themes).
-- **Tech Stack:** Python, TypeScript, Next.js, Tailwind CSS utilized.
-- **UI:** Functional vertical feed and processing interface.
-- **Advanced Features:** Agentic behavior via RAG + MCP tool selection/use.
 
 ## Key Dependencies
 

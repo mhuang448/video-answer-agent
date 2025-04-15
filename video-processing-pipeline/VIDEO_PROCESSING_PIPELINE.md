@@ -13,6 +13,10 @@ The pipeline executes a sequence of automated stages to ensure comprehensive vid
 
 Throughout this workflow, a central JSON metadata file is created and progressively enriched, meticulously tracking the processing and storing all generated data artifacts crucial for the downstream RAG agent.
 
+### Architectural Diagram
+
+![Video Processing & Knowledge Base Creation](../Video_Processing_Pipeline.png)
+
 ## 2. Prerequisites
 
 Before running this pipeline, ensure the following components are available and configured:
