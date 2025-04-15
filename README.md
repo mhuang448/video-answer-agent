@@ -69,10 +69,11 @@ This system operates via two primary workflows: processing video to build knowle
 
 - **Frontend:** Next.js 15+, TypeScript, React, Tailwind CSS, App Router
 - **Backend:** Python 3.10+, FastAPI, Uvicorn, Docker
-- **Cloud:** AWS (S3, App Runner, ECR), Vercel
+- **Data Storage and State Representation:** AWS S3
 - **Database:** Pinecone (Vector DB)
 - **AI APIs:** OpenAI, Google Cloud (Gemini), Perplexity, Anthropic
 - **Protocols:** Model Context Protocol (MCP)
+- **Deployment:** Docker, AWS ECR, AWS App Runner
 
 ## Key Dependencies
 
@@ -90,7 +91,7 @@ This system operates via two primary workflows: processing video to build knowle
 **1. Clone Repository:**
 
 ```bash
-git clone https://github.com/your-username/video-answer-agent.git
+git clone https://github.com/mhuang448/video-answer-agent.git
 cd video-answer-agent
 ```
 
