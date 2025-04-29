@@ -1,0 +1,38 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Documentation
+BACKEND.md
+*.md
+
+# Local development files
+.DS_Store
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+test/
+tests/
+*_test.py
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Git
+.git/
+.gitignore
+
+# Logs
+logs/
+*.log
