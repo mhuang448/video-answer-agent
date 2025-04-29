@@ -2,8 +2,8 @@
 FROM python:3.10-slim
 
 # Set environment variables to prevent Python from writing pyc files and buffering stdout/stderr
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Set the working directory in the container
 WORKDIR /app
@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Upgrade pip and install dependencies from requirements.txt
 # Copy requirements from the parent directory relative to the build context (backend/app)
-COPY ../requirements.txt .
+COPY ./requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
