@@ -56,6 +56,7 @@ def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) ->
         )
         query_vector = response.data[0].embedding
         end_embed = time.time()
+        print(f"DEBUG: Embedded query: {query_vector[:5]}...")
         print(f"  Query embedding took: {end_embed - start_embed:.4f} seconds")
     except OpenAIError as e:
         print(f"  ERROR embedding query: {e}")
@@ -84,10 +85,15 @@ def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) ->
         retrieved_chunks = query_results.get('matches', [])
         print(f"  Retrieved {len(retrieved_chunks)} chunks for video '{video_id}'")
         
-        # Sort by chunk_number if present
-        if retrieved_chunks:
-            retrieved_chunks.sort(key=lambda x: x.get('metadata', {}).get('chunk_number', float('inf')))
-            print("  Sorted retrieved chunks by chunk_number.")
+        # commenting out because we want to keep order of most semantically relevant chunks
+        # # Sort by chunk_number
+        # if retrieved_chunks:
+        #     retrieved_chunks.sort(key=lambda x: x.get('metadata', {}).get('chunk_number', float('inf')))
+        #     print("  Sorted retrieved chunks by chunk_number.")
+
+        # log scores of retrieved chunks
+        for i, chunk in enumerate(retrieved_chunks):
+            print(f"Chunk {i+1} score: {chunk.get('score', 'N/A')}")
 
         return retrieved_chunks
 
@@ -129,13 +135,14 @@ def _assemble_video_context(retrieved_chunks: List[Dict[str, Any]], video_metada
     if total_duration:
         context_parts.append(f"\nTotal Video Duration: {total_duration:.2f} seconds")
 
-    context_parts.append("\nPotentially Relevant Video Clips (in order):")
+    context_parts.append("\nPotentially Relevant Video Clips (in order from most to least relevant):")
     context_parts.append("---")
 
     if not retrieved_chunks:
         context_parts.append("(No specific video clips retrieved based on query)")
     else:
         for i, chunk_match in enumerate(retrieved_chunks):
+
             metadata = chunk_match.get('metadata', {})
             seq_num = metadata.get('chunk_number', '?')
             if isinstance(seq_num, (int, float)):
@@ -163,7 +170,7 @@ def _assemble_video_context(retrieved_chunks: List[Dict[str, Any]], video_metada
             if hints:
                 time_hint = f" ({' and '.join(hints)})"
             
-            context_parts.append(f"Video Clip {seq_num}{num_chunks_suffix} (Time: {start_ts} - {end_ts}){time_hint}:")
+            context_parts.append(f"Video Clip from {start_ts} to {end_ts} {time_hint}:")
             context_parts.append(caption)
             if i < len(retrieved_chunks) - 1:
                 context_parts.append("---")
@@ -586,8 +593,10 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 5.  Prioritize information from the Video Context when the query pertains to specific events or details *within* the video itself.
 6.  Use the Internet Search Results to enrich the answer, provide background, clarify concepts, or address aspects of the query not covered by the video context alone.
 7.  If the combined information is insufficient to answer the query fully, state what information is available and what is missing. Do not speculate beyond the provided contexts.
-8.  Do NOT include citations. Do NOT include clip numbers. You CAN optionally include timestamps if they are relevant to the answer.
-9.  Provide a clear and concise answer.
+8.  Generate the response in plain text only, without any markdown formatting.
+9.  Do NOT include citations.
+10.  You can optionally include timestamps or timestamp ranges WITHOUT milliseconds (only minutes and seconds) if they are helpful to the user. If you include timestamps, format them as "mm:ss" and timestamp ranges as "mm:ss-mm:ss".
+11.  Provide a clear and concise answer.
 
 ---
 
@@ -601,13 +610,15 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 
 ---
 
-**Internet Search Results (from Perplexity):**
+**Internet Search Results:**
 {mcp_result}
 
 ---
 
 **Final Answer:**
 """
+    # Debug: Print the synthesis prompt
+    # print(f"DEBUG: Synthesis prompt: {prompt}")
 
     print(f"  Sending synthesis prompt to OpenAI model: {synthesis_model}")
     synthesis_start = time.time()
