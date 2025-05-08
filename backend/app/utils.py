@@ -38,7 +38,6 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
         "openai_embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002"),
         "openai_synthesis_model": os.getenv("OPENAI_SYNTHESIS_MODEL", "gpt-4o-mini"), # Added for synthesis
         "google_api_key": os.getenv("GOOGLE_API_KEY"), # Or handle GOOGLE_APPLICATION_CREDENTIALS
-        "perplexity_api_key": os.getenv("PERPLEXITY_API_KEY"), # Needed for MCP server env
         "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY"), # Needed for Claude tool selection
         "anthropic_tool_selection_model": os.getenv("ANTHROPIC_TOOL_SELECTION_MODEL", "claude-3-7-sonnet-20250219"), # Added for Anthropic
         # Add direct AWS keys only if absolutely needed (prefer IAM roles)
@@ -57,8 +56,6 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
         print("Warning: Missing PINECONE_API_KEY environment variable.")
     if not config["openai_api_key"]:
         print("Warning: Missing OPENAI_API_KEY environment variable.")
-    if not config["perplexity_api_key"]:
-         print("Warning: Missing PERPLEXITY_API_KEY environment variable (needed for Perplexity MCP server).")
     if not config["mcp_perplexity_sse_url"]:
          print("Warning: Missing MCP_PERPLEXITY_SSE_URL environment variable (URL of the deployed Perplexity MCP server's /sse endpoint).")
     if not config["anthropic_api_key"]:

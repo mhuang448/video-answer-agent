@@ -4,7 +4,7 @@ services:
   mcp-server:
     container_name: perplexity-mcp-server
     build:
-      context: ./backend/perplexity-mcp-server # Path to the directory containing the Dockerfile
+      context: ./perplexity-mcp-server # Path to the directory containing the Dockerfile
       dockerfile: Dockerfile
     ports:
       - "8080:8080" # Map host port 8080 to container port 8080
@@ -19,7 +19,7 @@ services:
   backend:
     container_name: backend-container # Optional: explicit name
     build:
-      context: ./backend/app
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000" # Map host port 8000 to container port 8000
