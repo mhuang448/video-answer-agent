@@ -586,7 +586,8 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 5.  Prioritize information from the Video Context when the query pertains to specific events or details *within* the video itself.
 6.  Use the Internet Search Results to enrich the answer, provide background, clarify concepts, or address aspects of the query not covered by the video context alone.
 7.  If the combined information is insufficient to answer the query fully, state what information is available and what is missing. Do not speculate beyond the provided contexts.
-8.  Provide a clear and concise answer. Do not include citations or the video clip number(s). Timestamps are optional to include if they are relevant to the answer.
+8.  Do NOT include citations. Do NOT include clip numbers. You CAN optionally include timestamps if they are relevant to the answer.
+9.  Provide a clear and concise answer.
 
 ---
 
