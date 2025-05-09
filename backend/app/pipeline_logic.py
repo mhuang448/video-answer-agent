@@ -23,6 +23,9 @@ from pinecone.exceptions import PineconeException
 from fastmcp import Client as FastMCPClient
 from fastmcp.client.transports import SSETransport
 
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+
 # Import Anthropic specific exceptions
 from anthropic import APIError as AnthropicAPIError
 # Import httpx exceptions for sse_client error handling
@@ -53,6 +56,7 @@ def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) ->
         )
         query_vector = response.data[0].embedding
         end_embed = time.time()
+        print(f"DEBUG: Embedded query: {query_vector[:5]}...")
         print(f"  Query embedding took: {end_embed - start_embed:.4f} seconds")
     except OpenAIError as e:
         print(f"  ERROR embedding query: {e}")
@@ -81,10 +85,15 @@ def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) ->
         retrieved_chunks = query_results.get('matches', [])
         print(f"  Retrieved {len(retrieved_chunks)} chunks for video '{video_id}'")
         
-        # Sort by chunk_number if present
-        if retrieved_chunks:
-            retrieved_chunks.sort(key=lambda x: x.get('metadata', {}).get('chunk_number', float('inf')))
-            print("  Sorted retrieved chunks by chunk_number.")
+        # commenting out because we want to keep order of most semantically relevant chunks
+        # # Sort by chunk_number
+        # if retrieved_chunks:
+        #     retrieved_chunks.sort(key=lambda x: x.get('metadata', {}).get('chunk_number', float('inf')))
+        #     print("  Sorted retrieved chunks by chunk_number.")
+
+        # log scores of retrieved chunks
+        for i, chunk in enumerate(retrieved_chunks):
+            print(f"Chunk {i+1} score: {chunk.get('score', 'N/A')}")
 
         return retrieved_chunks
 
@@ -126,13 +135,14 @@ def _assemble_video_context(retrieved_chunks: List[Dict[str, Any]], video_metada
     if total_duration:
         context_parts.append(f"\nTotal Video Duration: {total_duration:.2f} seconds")
 
-    context_parts.append("\nPotentially Relevant Video Clips (in order):")
+    context_parts.append("\nPotentially Relevant Video Clips (in order from most to least relevant):")
     context_parts.append("---")
 
     if not retrieved_chunks:
         context_parts.append("(No specific video clips retrieved based on query)")
     else:
         for i, chunk_match in enumerate(retrieved_chunks):
+
             metadata = chunk_match.get('metadata', {})
             seq_num = metadata.get('chunk_number', '?')
             if isinstance(seq_num, (int, float)):
@@ -160,7 +170,7 @@ def _assemble_video_context(retrieved_chunks: List[Dict[str, Any]], video_metada
             if hints:
                 time_hint = f" ({' and '.join(hints)})"
             
-            context_parts.append(f"Video Clip {seq_num}{num_chunks_suffix} (Time: {start_ts} - {end_ts}){time_hint}:")
+            context_parts.append(f"Video Clip from {start_ts} to {end_ts} {time_hint}:")
             context_parts.append(caption)
             if i < len(retrieved_chunks) - 1:
                 context_parts.append("---")
@@ -227,7 +237,7 @@ def _select_perplexity_tool_rule_based(query: str) -> str:
 # LLM-based tool selection and execution logic
 # Always use this to properly leverage Model Context Protocol
 async def _select_and_run_tool_llm_based(
-    client: FastMCPClient, # Changed from ClientSession
+    client: FastMCPClient | ClientSession, # Changed from ClientSession
     query_context: str,
     anthropic_client: Any # Should be Anthropic client instance
 ) -> str:
@@ -329,7 +339,7 @@ async def _select_and_run_tool_llm_based(
 
     return tool_result_text
 
-async def _call_mcp(
+async def _call_fastmcp(
     intermediate_prompt: str,
     use_llm_selection: bool = True # Default set back to True
 ) -> str:
@@ -441,6 +451,124 @@ async def _call_mcp(
 
     return mcp_result_text
 
+async def _call_mcp(
+    intermediate_prompt: str,
+    use_llm_selection: bool = True # Default set back to True
+) -> str:
+    """Connects to the configured MCP server URL via SSE/HTTP using FastMCP,
+       selects and calls a tool (using LLM or rules), and returns the text result.
+    """
+    mcp_sse_url = CONFIG.get("mcp_perplexity_sse_url")
+    if not mcp_sse_url:
+        print("ERROR: MCP_PERPLEXITY_SSE_URL environment variable is not set.")
+        return "[Error: MCP Server URL not configured]"
+
+    # Ensure URL is well-formed
+    if not mcp_sse_url.startswith(("http://", "https://")):
+         print(f"ERROR: Invalid MCP_PERPLEXITY_SSE_URL format: {mcp_sse_url}. Expected http(s)://.../")
+         return "[Error: Invalid MCP Server URL format]"
+    if '/' not in mcp_sse_url.split('://', 1)[1]:
+        mcp_sse_url = mcp_sse_url.rstrip('/') + '/sse'
+        print(f"WARN: Assuming SSE endpoint is /sse. Full URL: {mcp_sse_url}")
+
+    print(f"Connecting to MCP server via SSE at '{mcp_sse_url}' using FastMCP (LLM Select: {use_llm_selection})...")
+    mcp_result_text = "[MCP call failed]"
+    client = None
+
+    try:
+        async with sse_client(mcp_sse_url) as streams:
+            read_stream, write_stream = streams
+            print("  SSE client connection established, creating session object...")
+
+            # Create a ClientSession using the streams from sse_client
+            # NOTE: Using default clientInfo and capabilities as defined in mcp/client/session.py
+            async with ClientSession(*streams) as client:
+        # print("  DEBUG: Creating SSETransport...")
+        # transport = SSETransport(mcp_sse_url)
+        # print(f"  DEBUG: Transport created for {mcp_sse_url}")
+
+        # print("  DEBUG: Creating FastMCPClient and connecting...")
+        # client = FastMCPClient(transport)
+        # async with client:
+        #     print("  DEBUG: FastMCP client connected successfully within context manager.")
+
+                # --- Use LLM selection or Rule-based --- 
+                if use_llm_selection:
+                    print("  DEBUG: Attempting LLM-based tool selection...")
+                    mcp_result_text = await _select_and_run_tool_llm_based(
+                        client, # Pass the FastMCP client
+                        intermediate_prompt,
+                        ANTHROPIC_CLIENT
+                    )
+                else:
+                    # Fallback to rule-based selection
+                    print("  DEBUG: Using rule-based tool selection...")
+                    selected_tool = _select_perplexity_tool_rule_based(intermediate_prompt)
+                    print(f"  DEBUG: Rule-based selected tool: '{selected_tool}'")
+                    print(f"  DEBUG: Calling tool '{selected_tool}' via FastMCP client...")
+                    tool_call_start = time.time()
+                    try:
+                        tool_args = {"messages": [{"role": "user", "content": intermediate_prompt}]}
+                        print(f"  DEBUG: Tool arguments: {json.dumps(tool_args)[:100]}...")
+                        
+                        result = await client.call_tool(selected_tool, tool_args)
+                        tool_call_end = time.time()
+                        print(f"  DEBUG: Raw tool result: {result}") 
+                        print(f"  INFO: Tool call finished in {tool_call_end - tool_call_start:.2f} seconds.")
+
+                        # --- Result Parsing (copied from previous working version) --- 
+                        current_tool_text = ""
+                        if hasattr(result, 'content') and isinstance(result.content, list):
+                            print("  DEBUG: Extracting text from result.content list...")
+                            for part in result.content:
+                                if hasattr(part, 'type') and part.type == 'text' and hasattr(part, 'text'):
+                                    print(f"  DEBUG: Found text content part: {part.text[:50]}...")
+                                    current_tool_text += part.text + "\n"
+                                else:
+                                    print(f"  DEBUG: Skipping non-text part: {part}")
+                            mcp_result_text = current_tool_text.strip()
+                            print(f"  INFO: Received text result from '{selected_tool}' (length: {len(mcp_result_text)} chars).")
+                        elif isinstance(result, str):
+                            print("  DEBUG: Result is likely a direct string.")
+                            mcp_result_text = result
+                            print(f"  INFO: Received simple string result from '{selected_tool}' (length: {len(mcp_result_text)} chars).")
+                        elif hasattr(result, 'isError') and result.isError and hasattr(result, 'content') and isinstance(result.content, list):
+                            print(f"  WARN: Tool '{selected_tool}' reported an error.")
+                            for part in result.content:
+                                if hasattr(part, 'type') and part.type == 'text' and hasattr(part, 'text'):
+                                    current_tool_text += part.text + "\n"
+                            mcp_result_text = f"[Tool Error: {current_tool_text.strip()}]"
+                            print(f"  WARN: Extracted error message: {mcp_result_text}")
+                        else:
+                            print(f"  WARN: Tool '{selected_tool}' returned unrecognized structure. Result: {result}")
+                            mcp_result_text = f"[Tool '{selected_tool}' returned unexpected result structure]"
+                        # --- End Result Parsing --- 
+
+                    except Exception as e:
+                        print(f"  ERROR: Exception calling tool '{selected_tool}' (rule-based): {type(e).__name__} - {e}")
+                        import traceback
+                        traceback.print_exc()
+                        mcp_result_text = f"[Error executing rule-based tool '{selected_tool}': {e}]"
+
+    except httpx.ConnectError as e: 
+        print(f"  ERROR: Connection failed to MCP server at {mcp_sse_url}. Is it running? Details: {e}")
+        mcp_result_text = f"[Error: Connection failed to MCP server at {mcp_sse_url}]"
+    except httpx.HTTPStatusError as e: 
+         print(f"  ERROR: HTTP error {e.response.status_code} from {mcp_sse_url}: {e.response.text}")
+         mcp_result_text = f"[Error: HTTP {e.response.status_code} from MCP server]"
+    except asyncio.TimeoutError: 
+         print(f"  ERROR: Timeout during FastMCP interaction with {mcp_sse_url}.")
+         mcp_result_text = "[Error: Timeout interacting with MCP server]"
+    except Exception as e:
+        print(f"  ERROR: Unexpected error during FastMCP interaction: {type(e).__name__} - {e}")
+        import traceback
+        traceback.print_exc()
+        mcp_result_text = f"[Unexpected error interacting with MCP server: {e}]"
+    finally:
+        print(f"INFO: FastMCP SSE interaction complete for server at '{mcp_sse_url}'.")
+
+    return mcp_result_text
+
 def _synthesize_answer(user_query: str, video_context: str, mcp_result: str) -> str:
     """Synthesizes the final answer using OpenAI, combining the original query,
        video context, and the MCP result.
@@ -465,7 +593,10 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 5.  Prioritize information from the Video Context when the query pertains to specific events or details *within* the video itself.
 6.  Use the Internet Search Results to enrich the answer, provide background, clarify concepts, or address aspects of the query not covered by the video context alone.
 7.  If the combined information is insufficient to answer the query fully, state what information is available and what is missing. Do not speculate beyond the provided contexts.
-8.  Provide a clear and concise answer. Do not include citations.
+8.  Generate the response in plain text only, without any markdown formatting.
+9.  Do NOT include citations.
+10.  You can optionally include timestamps or timestamp ranges WITHOUT milliseconds (only minutes and seconds) if they are helpful to the user. If you include timestamps, format them as "mm:ss" and timestamp ranges as "mm:ss-mm:ss".
+11.  Provide a clear and concise answer.
 
 ---
 
@@ -479,13 +610,15 @@ Please answer the user query comprehensively by synthesizing relevant informatio
 
 ---
 
-**Internet Search Results (from Perplexity):**
+**Internet Search Results:**
 {mcp_result}
 
 ---
 
 **Final Answer:**
 """
+    # Debug: Print the synthesis prompt
+    # print(f"DEBUG: Synthesis prompt: {prompt}")
 
     print(f"  Sending synthesis prompt to OpenAI model: {synthesis_model}")
     synthesis_start = time.time()

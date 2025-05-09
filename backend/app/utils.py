@@ -38,7 +38,6 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
         "openai_embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002"),
         "openai_synthesis_model": os.getenv("OPENAI_SYNTHESIS_MODEL", "gpt-4o-mini"), # Added for synthesis
         "google_api_key": os.getenv("GOOGLE_API_KEY"), # Or handle GOOGLE_APPLICATION_CREDENTIALS
-        "perplexity_api_key": os.getenv("PERPLEXITY_API_KEY"), # Needed for MCP server env
         "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY"), # Needed for Claude tool selection
         "anthropic_tool_selection_model": os.getenv("ANTHROPIC_TOOL_SELECTION_MODEL", "claude-3-7-sonnet-20250219"), # Added for Anthropic
         # Add direct AWS keys only if absolutely needed (prefer IAM roles)
@@ -57,8 +56,6 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
         print("Warning: Missing PINECONE_API_KEY environment variable.")
     if not config["openai_api_key"]:
         print("Warning: Missing OPENAI_API_KEY environment variable.")
-    if not config["perplexity_api_key"]:
-         print("Warning: Missing PERPLEXITY_API_KEY environment variable (needed for Perplexity MCP server).")
     if not config["mcp_perplexity_sse_url"]:
          print("Warning: Missing MCP_PERPLEXITY_SSE_URL environment variable (URL of the deployed Perplexity MCP server's /sse endpoint).")
     if not config["anthropic_api_key"]:
@@ -197,6 +194,36 @@ def get_anthropic_client():
         return None
 
 ANTHROPIC_CLIENT = get_anthropic_client()
+
+# --- Custom Logging Filter for MCP Handshake Warnings ---
+import logging
+
+class MCPHandshakeFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filters out specific Pydantic validation warnings from MCP client handshake."""
+        # Check if it's the Pydantic validation warning and related to 'sse/connection'
+        # The logger name is 'root' based on the provided logs.
+        is_mcp_warning = record.name == 'root' and record.levelname == 'WARNING'
+        log_message = record.getMessage()
+        is_validation_error_msg = "Failed to validate notification" in log_message
+        is_sse_connection_related = "input_value='sse/connection'" in log_message
+        
+        if is_mcp_warning and is_validation_error_msg and is_sse_connection_related:
+            # Suppress this specific log message
+            # print(f"DEBUG: Suppressing MCP handshake warning: {log_message[:200]}...") # Optional: for debugging the filter
+            return False
+        return True
+
+# Apply the filter to the root logger
+# This ensures it's active for any warnings bubbling up to the root logger
+# from the mcp library if it doesn't use a more specific logger for these warnings.
+root_logger = logging.getLogger()
+# Check if the filter is already added to prevent duplicates during reloads (e.g., with uvicorn --reload)
+if not any(isinstance(f, MCPHandshakeFilter) for f in root_logger.filters):
+    print("INFO: Applying MCPHandshakeFilter to root logger.")
+    root_logger.addFilter(MCPHandshakeFilter())
+else:
+    print("INFO: MCPHandshakeFilter already applied to root logger.")
 
 def generate_unique_video_id(url: str) -> str:
     """Generates a unique id based on the URL (TikTok format assumed)."""
