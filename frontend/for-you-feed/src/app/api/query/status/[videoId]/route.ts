@@ -26,10 +26,10 @@ const API_BASE_URL = "http://localhost:8000";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { videoId: string } }
+  { params }: { params: Promise<{ videoId: string }> }
 ) {
-  // Using object destructuring to properly access params
-  const { videoId } = params;
+  // Await params as suggested by the solution
+  const { videoId } = await params;
 
   try {
     const response = await fetch(
