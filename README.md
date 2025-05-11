@@ -110,7 +110,7 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd ../frontend
 npm install # or yarn install
-# Create .env.local with NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+# Create .env.local with BACKEND_API_URL=http://localhost:8000
 npm run dev # or yarn dev
 ```
 

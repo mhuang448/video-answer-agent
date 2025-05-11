@@ -59,10 +59,10 @@ export default async function ForYouPage() {
 // // which in turn calls the FastAPI backend.
 // async function getForYouVideos(): Promise<VideoInfo[]> {
 //   try {
-//     // Ensure NEXT_PUBLIC_API_BASE_URL is set in your .env.local or environment variables
+//     // Ensure BACKEND_API_URL is set in your .env.local or environment variables
 //     // Defaulting to localhost:3000 where the Next.js app runs, assuming the API route is relative
 //     const baseUrl =
-//       process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+//       process.env.BACKEND_API_URL || "http://localhost:3000";
 //     const apiUrl = `${baseUrl}/api/videos/foryou`; // Path to your Next.js API route handler
 
 //     console.log(`Fetching videos from: ${apiUrl}`); // Log the URL being fetched

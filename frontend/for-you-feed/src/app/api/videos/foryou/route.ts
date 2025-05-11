@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { VideoInfo } from "@/app/types";
 
-const API_BASE_URL = "https://79u5bm2jtn.us-east-2.awsapprunner.com";
+const API_BASE_URL = process.env.BACKEND_API_URL;
 
 /**
  * GET handler for fetching videos for the For You feed

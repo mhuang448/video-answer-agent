@@ -211,7 +211,7 @@ Client-side state is managed primarily using standard React Hooks within individ
     - Create a file named `.env.local` in the `frontend/for-you-feed` directory.
     - Add the URL of your **running** backend FastAPI service:
       ```plaintext
-      NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      BACKEND_API_URL=http://localhost:8000
       # Replace with your deployed backend URL if not running locally
       ```
     - `NEXT_PUBLIC_` prefix makes the variable accessible in the browser-side code.
@@ -225,7 +225,7 @@ Client-side state is managed primarily using standard React Hooks within individ
     ```
 5.  Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-**Note:** The backend FastAPI service must be running and accessible at the URL specified in `NEXT_PUBLIC_API_BASE_URL` for the frontend to function correctly.
+**Note:** The backend FastAPI service must be running and accessible at the URL specified in `BACKEND_API_URL` for the frontend to function correctly.
 
 ## 10. Deployment
 
@@ -234,5 +234,5 @@ Client-side state is managed primarily using standard React Hooks within individ
   1.  Connect your Git repository to Vercel.
   2.  Configure the **Root Directory** in Vercel project settings to `frontend/for-you-feed`.
   3.  Set the necessary **Environment Variables** in Vercel:
-      - `NEXT_PUBLIC_API_BASE_URL`: Point this to the **publicly accessible URL** of your deployed FastAPI backend service (e.g., your AWS App Runner URL).
+      - `BACKEND_API_URL`: Point this to the **publicly accessible URL** of your deployed FastAPI backend service (e.g., your AWS App Runner URL).
 - **Build Process:** Vercel automatically detects Next.js, builds the application, and deploys it.

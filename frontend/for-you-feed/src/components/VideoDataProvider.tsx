@@ -16,7 +16,7 @@ const VideoDataProvider = {
       // In production, you'd use your deployed URL
       const baseUrl =
         process.env.NODE_ENV === "production"
-          ? "https://79u5bm2jtn.us-east-2.awsapprunner.com/" // Replace with your actual production URL
+          ? "https://79u5bm2jtn.us-east-2.awsapprunner.com" // Replace with your actual production URL
           : "http://localhost:3000";
 
       // Using cache: 'no-store' to ensure we get fresh videos on every request

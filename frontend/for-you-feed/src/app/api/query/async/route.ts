@@ -12,7 +12,7 @@ export interface ProcessingStartedResponse {
   interaction_id: string;
 }
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = process.env.BACKEND_API_URL;
 
 /**
  * POST handler for querying a processed video

@@ -18,7 +18,7 @@ export interface StatusResponse {
   interactions: Interaction[];
 }
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = process.env.BACKEND_API_URL;
 
 /**
  * GET handler for checking video processing and query status
