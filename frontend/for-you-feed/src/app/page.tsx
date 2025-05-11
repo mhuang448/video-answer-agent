@@ -3,6 +3,8 @@ import VideoFeed from "@/components/VideoFeed";
 import LoadingFallback from "@/components/LoadingFallback";
 import VideoDataProvider from "@/components/VideoDataProvider";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Main page component for the For You feed
  * Uses server-side rendering for initial data fetch

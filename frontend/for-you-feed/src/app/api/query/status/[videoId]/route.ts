@@ -1,22 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-export interface Interaction {
-  interaction_id: string;
-  user_name?: string;
-  user_query: string;
-  query_timestamp: string;
-  status: string;
-  ai_answer?: string;
-  answer_timestamp?: string;
-}
-
-export interface StatusResponse {
-  processing_status?: string;
-  video_url?: string;
-  like_count?: number;
-  uploader_name?: string;
-  interactions: Interaction[];
-}
+import { StatusResponse } from "@/app/types";
 
 const API_BASE_URL = process.env.BACKEND_API_URL;
 
