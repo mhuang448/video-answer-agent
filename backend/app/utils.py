@@ -43,10 +43,9 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
         # Add direct AWS keys only if absolutely needed (prefer IAM roles)
         "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
         "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-        # "mcp_servers": {}, # Initialize mcp_servers dict, commenting out for now, reference to deprecated JSON mcp_config.json file
-        # --- EDIT: Replace MCP server command/args with SSE URL ---
         "mcp_perplexity_sse_url": os.getenv("MCP_PERPLEXITY_SSE_URL"), # e.g., https://<host>/sse
-        # --- END EDIT ---
+
+        "production_frontend_url": os.getenv("PRODUCTION_FRONTEND_URL"),
     }
 
     # Basic validation
@@ -66,7 +65,6 @@ def load_config() -> Dict[str, Any]: # Changed return type hint
 CONFIG = load_config() # Load config once when the module is imported
 
 # --- AWS S3 Client Setup ---
-
 def get_s3_client():
     """Initializes and returns an S3 client."""
     try:

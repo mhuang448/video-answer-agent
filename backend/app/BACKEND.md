@@ -144,6 +144,7 @@ The backend relies heavily on environment variables for configuration. Use a `.e
 - `PERPLEXITY_API_KEY`: API key for Perplexity. _(Required by the separate Perplexity MCP Server container, not directly by this backend container, but crucial for the overall system)._
 - `ANTHROPIC_API_KEY`: API key for Anthropic (needed for Claude-based tool selection).
 - `MCP_PERPLEXITY_SSE_URL`: **Crucial.** The full URL (e.g., `http://mcp-server:8080/sse` or `https://<your-mcp-server-url>/sse`) where the Perplexity MCP Server's SSE endpoint is listening. The backend _must_ be able to reach this URL.
+- `PRODUCTION_FRONTEND_URL`: The public URL of the deployed Vercel frontend application. Required for configuring CORS to allow requests from the frontend.
 - _(Optional but Recommended for Production)_: AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) if **not** using IAM roles (e.g., an App Runner Instance Role, which is the preferred method).
 
 **Optional Variables:**

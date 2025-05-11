@@ -33,7 +33,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000", # Local Next.js frontend
     # Add your Vercel deployment URL(s) here after deployment
-    "https://www.videoansweragent.com/", # Production frontend domain
+    CONFIG['production_frontend_url'], # Production frontend domain
     # e.g., "https://your-frontend-app-name.vercel.app",
     # "*" # Allow all origins (less secure, use specific origins in production)
 ]
