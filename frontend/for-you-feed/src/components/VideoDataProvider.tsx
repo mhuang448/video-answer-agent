@@ -16,7 +16,7 @@ const VideoDataProvider = {
       // In production, you'd use your deployed URL
       const baseUrl =
         process.env.NODE_ENV === "production"
-          ? process.env.BACKEND_API_URL
+          ? process.env.NEXT_PUBLIC_FRONTEND_URL
           : "http://localhost:3000";
 
       // Using cache: 'no-store' to ensure we get fresh videos on every request
