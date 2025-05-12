@@ -202,7 +202,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         showTimestampWithTimeout(seekFraction * 100, targetTime);
       }
     },
-    [showTimestampWithTimeout]
+    [showTimestampWithTimeout, isDragging]
   );
 
   // Progress bar hover handlers
@@ -400,12 +400,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   // Cleanup timeouts on unmount
   useEffect(() => {
+    // Capture current values when effect runs
+    const playIconTimeout = playIconTimeoutRef.current;
+    const pauseIconTimeout = pauseIconTimeoutRef.current;
+    const timestampTimeout = timestampTimeoutRef.current;
+
     return () => {
-      if (playIconTimeoutRef.current) clearTimeout(playIconTimeoutRef.current);
-      if (pauseIconTimeoutRef.current)
-        clearTimeout(pauseIconTimeoutRef.current);
-      if (timestampTimeoutRef.current)
-        clearTimeout(timestampTimeoutRef.current);
+      if (playIconTimeout) clearTimeout(playIconTimeout);
+      if (pauseIconTimeout) clearTimeout(pauseIconTimeout);
+      if (timestampTimeout) clearTimeout(timestampTimeout);
     };
   }, []);
 
@@ -498,13 +501,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         {/* Played Track */}
         <div
-          className="absolute left-0 top-0 h-full bg-red-500 rounded-sm transition-all duration-100 ease-linear"
+          className={`absolute left-0 top-0 h-full bg-red-500 rounded-sm ${
+            isDragging ? "" : "transition-all duration-100 ease-linear"
+          }`}
           style={{ width: `${progress * 100}%` }}
         />
 
         {/* Timestamp Display */}
         <div
-          className={`absolute bottom-[calc(100%+24px)] left-1/2 -translate-x-1/2 py-1 text-white text-2xl font-semibold drop-shadow-lg transition-opacity duration-150 ease-out ${
+          className={`absolute bottom-[calc(100%+24px)] left-1/2 -translate-x-1/2 py-1 text-white text-2xl font-semibold drop-shadow-lg transition-opacity duration-150 ease-out whitespace-nowrap ${
             showTimestamp ? "opacity-100" : "opacity-0"
           }`}
         >
