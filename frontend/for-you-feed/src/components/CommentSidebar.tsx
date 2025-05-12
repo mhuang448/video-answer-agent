@@ -78,7 +78,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
   videoId,
   commentCount = 0,
 }) => {
-  const [commentText, setCommentText] = useState("");
+  const [commentText, setCommentText] = useState("@AskAI ");
   // State to hold fetched interactions
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   // State for optimistic user queries (cleared on successful fetch)
@@ -188,14 +188,14 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
   const handleSubmitComment = async (e: FormEvent) => {
     e.preventDefault();
     const trimmedComment = commentText.trim();
-    if (!trimmedComment) return;
+    if (!trimmedComment || trimmedComment === "@AskAI") return;
 
     // Check for @AskAI prefix
     const askAiPrefix = "@AskAI";
     if (trimmedComment.toLowerCase().startsWith(askAiPrefix.toLowerCase())) {
       const userQuery = trimmedComment.substring(askAiPrefix.length).trim();
       if (!userQuery) {
-        setError("@AskAI tag requires a question after it.");
+        setError("Please type your question after @AskAI.");
         return; // Don't submit if query is empty
       }
 
@@ -211,7 +211,7 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
         answer_timestamp: undefined,
       };
       setOptimisticQueries((prev) => [optimisticInteraction, ...prev]);
-      setCommentText(""); // Clear input
+      setCommentText("@AskAI "); // Reset to prefilled state instead of empty
       setError(null);
 
       // Scroll to bottom after adding optimistic query
@@ -280,8 +280,8 @@ const CommentSidebar: React.FC<CommentSidebarProps> = ({
       // Handle regular comments (optional - currently not saving them)
       console.log("Regular comment submitted (not saved):", trimmedComment);
       // You could add logic here to save regular comments if needed
-      // For now, just clear the input
-      setCommentText("");
+      // Reset to prefilled state
+      setCommentText("@AskAI ");
       // Optionally show a message that only @AskAI comments are processed
       // setError("Only comments starting with @AskAI are processed currently.")
     }
