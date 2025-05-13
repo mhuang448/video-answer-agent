@@ -1,6 +1,11 @@
 @import "tailwindcss/preflight";
 @import "tailwindcss";
 
+/* Example of how to use a custom breakpoint (30 rem = 480px) */
+/* @theme {
+  --breakpoint-xs: 30rem;
+} */
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

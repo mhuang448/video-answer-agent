@@ -125,12 +125,12 @@ const VideoFeed = ({ initialVideos }: VideoFeedProps) => {
             <div
               id={`video-container-${video.video_id}`}
               key={video.video_id || `video-${index}`}
-              className="h-screen w-screen snap-start flex justify-center items-center"
+              className="relative h-screen w-screen snap-start flex justify-center items-center overflow-hidden"
             >
               {/* Horizontal container for video and action bar */}
-              <div className="flex items-center justify-center -translate-y-9">
+              <div className="h-full w-full flex items-center justify-center">
                 {/* Inner container to constrain video width and center it */}
-                <div className="relative w-full max-w-sm aspect-[9/16]">
+                <div className="relative w-full max-w-2xs md:max-w-xs lg:max-w-sm aspect-[9/16] max-h-full">
                   <VideoPlayer
                     videoInfo={video}
                     isActive={activeVideoId === video.video_id}
