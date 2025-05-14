@@ -3,6 +3,10 @@ import time
 import json
 import asyncio
 from typing import List, Dict, Any
+import concurrent.futures
+import threading
+import os # For environment variable based configuration for the job
+from botocore.exceptions import ClientError # Already used by some S3 helpers in utils
 
 # Import helper functions and clients from utils
 from .utils import (
@@ -12,6 +16,7 @@ from .utils import (
     get_video_metadata_from_s3,
     add_interaction_to_s3,
     update_interaction_status_in_s3,
+    VIDEO_DATA_PREFIX
 )
 from .models import VideoMetadata, Interaction # Import Pydantic models for structure
 
@@ -31,7 +36,7 @@ from anthropic import APIError as AnthropicAPIError
 # Import httpx exceptions for sse_client error handling
 import httpx
 
-    
+S3_INTERACTIONS_FILENAME = "interactions.json"
 
 def _retrieve_relevant_chunks(video_id: str, user_query: str, top_k: int = 3) -> List[Dict[str, Any]]:
     """Embeds the user query and retrieves relevant chunks from Pinecone,
@@ -641,7 +646,146 @@ Please answer the user query comprehensively by synthesizing relevant informatio
         print(f"  Unexpected ERROR during OpenAI synthesis: {e}")
         return f"[Unexpected error during answer synthesis: {e}]"
 
+def _delete_s3_object_sync(s3_client, bucket_name: str, s3_key: str) -> tuple[bool, str]:
+    """
+    Synchronously deletes a single object from S3.
+    Designed to be called by the ThreadPoolExecutor.
+    """
+    thread_id = threading.get_ident()
+    # Using print for logging as per existing style in this file
+    print(f"[Thread-{thread_id}] Attempting to delete 's3://{bucket_name}/{s3_key}'...")
+    try:
+        s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+        print(f"[Thread-{thread_id}] SUCCESS: Deleted 's3://{bucket_name}/{s3_key}'")
+        return True, s3_key
+    except ClientError as e:
+        print(f"[Thread-{thread_id}] ERROR deleting 's3://{bucket_name}/{s3_key}': {e}")
+        return False, s3_key
+    except Exception as e: # Catch any other unexpected errors
+        print(f"[Thread-{thread_id}] UNEXPECTED ERROR deleting 's3://{bucket_name}/{s3_key}': {e}")
+        return False, s3_key
 
+def _find_interaction_files_in_s3(s3_client, bucket_name: str, base_prefix: str) -> List[str]:
+    """
+    Lists all interaction.json files in the S3 bucket under the specified base_prefix.
+    Example base_prefix: "video-data/"
+    """
+    print(f"SCHEDULER_JOB: Scanning for '{S3_INTERACTIONS_FILENAME}' files under 's3://{bucket_name}/{base_prefix}'...")
+    interaction_keys = []
+    try:
+        paginator = s3_client.get_paginator('list_objects_v2')
+        # Paginate through common prefixes (representing video_id "directories")
+        dir_iterator = paginator.paginate(Bucket=bucket_name, Prefix=base_prefix, Delimiter='/')
+
+        for page in dir_iterator:
+            if 'CommonPrefixes' in page:
+                for prefix_obj in page['CommonPrefixes']:
+                    video_id_level_prefix = prefix_obj.get('Prefix')
+                    if video_id_level_prefix:
+                        # Construct the full key for the interactions.json file
+                        interaction_key = f"{video_id_level_prefix}{S3_INTERACTIONS_FILENAME}"
+                        try:
+                            # Check if the interactions.json file actually exists
+                            s3_client.head_object(Bucket=bucket_name, Key=interaction_key)
+                            interaction_keys.append(interaction_key)
+                            print(f"SCHEDULER_JOB: Found for deletion: s3://{bucket_name}/{interaction_key}")
+                        except ClientError as e:
+                            # If file not found (NoSuchKey or 404), or forbidden (403), skip it
+                            if e.response['Error']['Code'] in ('NoSuchKey', '404', '403'):
+                                continue
+                            else:
+                                # Log other errors but continue scanning
+                                print(f"SCHEDULER_JOB: Error checking S3 key '{interaction_key}': {e}")
+        return interaction_keys
+    except ClientError as e:
+        print(f"SCHEDULER_JOB: S3 ClientError while listing objects in bucket '{bucket_name}' under prefix '{base_prefix}': {e}")
+        return [] # Return empty list on error to prevent further processing
+    except Exception as e:
+        print(f"SCHEDULER_JOB: Unexpected error scanning S3 for '{S3_INTERACTIONS_FILENAME}' files: {e}")
+        return []
+
+def clear_all_interactions_job():
+    """
+    Job to find and delete all 'interactions.json' files from S3.
+    This function is synchronous and designed to be run by APScheduler.
+    """
+    print("SCHEDULER_JOB: Starting daily job to clear all interactions.json files...")
+    job_start_time = time.time()
+
+    if not S3_CLIENT:
+        print("SCHEDULER_JOB ERROR: S3_CLIENT not available. Cannot clear interactions.")
+        return
+    
+    s3_bucket_name = CONFIG.get("s3_bucket_name")
+    if not s3_bucket_name:
+        print("SCHEDULER_JOB ERROR: S3_BUCKET_NAME not configured. Cannot clear interactions.")
+        return
+
+    # Use VIDEO_DATA_PREFIX from utils.py, ensuring it ends with '/'
+    # This prefix is typically "video-data/"
+    s3_target_prefix = VIDEO_DATA_PREFIX
+    if not s3_target_prefix.endswith('/'):
+        s3_target_prefix += '/'
+
+    interaction_s3_keys = _find_interaction_files_in_s3(S3_CLIENT, s3_bucket_name, s3_target_prefix)
+
+    if not interaction_s3_keys:
+        print("SCHEDULER_JOB: No interaction.json files found to delete.")
+        job_duration = time.time() - job_start_time
+        print(f"SCHEDULER_JOB: Daily clear interactions job finished in {job_duration:.2f} seconds. 0 files processed.")
+        return
+
+    print(f"SCHEDULER_JOB: Found {len(interaction_s3_keys)} '{S3_INTERACTIONS_FILENAME}' files to delete.")
+
+    # Configure max_workers for concurrent deletion, defaulting to 5
+    # This can be tuned via an environment variable if needed.
+    max_workers_env = os.getenv('CLEAR_INTERACTIONS_MAX_WORKERS', '5')
+    try:
+        max_workers = int(max_workers_env)
+        if max_workers <= 0:
+            max_workers = 5
+            print(f"SCHEDULER_JOB WARN: CLEAR_INTERACTIONS_MAX_WORKERS must be positive, defaulting to {max_workers}.")
+    except ValueError:
+        max_workers = 5
+        print(f"SCHEDULER_JOB WARN: Invalid CLEAR_INTERACTIONS_MAX_WORKERS value '{max_workers_env}', defaulting to {max_workers}.")
+
+    success_count = 0
+    failure_count = 0
+    failed_s3_keys = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Map futures to S3 keys to identify them upon completion/failure
+        future_to_s3_key = {
+            executor.submit(_delete_s3_object_sync, S3_CLIENT, s3_bucket_name, s3_key): s3_key
+            for s3_key in interaction_s3_keys
+        }
+        
+        for future in concurrent.futures.as_completed(future_to_s3_key):
+            s3_key_processed = future_to_s3_key[future]
+            try:
+                success, returned_s3_key = future.result()
+                if success:
+                    success_count += 1
+                else:
+                    failure_count += 1
+                    failed_s3_keys.append(returned_s3_key)
+            except Exception as exc:
+                print(f"SCHEDULER_JOB EXCEPTION: Deleting key '{s3_key_processed}' generated an exception in the future: {exc}")
+                failure_count += 1
+                failed_s3_keys.append(s3_key_processed)
+
+    job_duration = time.time() - job_start_time
+    print("-" * 30)
+    print("SCHEDULER_JOB: Daily clear interactions.json summary:")
+    print(f"  Attempted to delete: {len(interaction_s3_keys)} files")
+    print(f"  Successfully deleted: {success_count}")
+    print(f"  Failed to delete: {failure_count}")
+    if failed_s3_keys:
+        print("  Failed S3 keys (see logs above for details):")
+        for failed_key in failed_s3_keys:
+            print(f"    - {failed_key}")
+    print(f"  Job duration: {job_duration:.2f} seconds.")
+    print("-" * 30)
 
 async def run_query_pipeline_async(
     video_id: str,

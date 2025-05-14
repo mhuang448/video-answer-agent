@@ -8,6 +8,11 @@ import json
 from botocore.exceptions import ClientError, ReadTimeoutError
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
+import os # For environment variable based configuration for scheduler
+from contextlib import asynccontextmanager # Import for lifespan
+
+# --- APScheduler Imports ---
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Import models, utils, and pipeline logic
 from .models import (
@@ -19,13 +24,69 @@ from .utils import (
 )
 from .pipeline_logic import (
     run_query_pipeline_async,
+    clear_all_interactions_job # Import the job function
 )
+
+# --- Scheduler Setup ---
+# Keep scheduler instance at module level
+scheduler = BackgroundScheduler(timezone="UTC") # Use UTC for consistency
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Async context manager for FastAPI lifespan events.
+    Handles startup and shutdown operations for the application, including the scheduler.
+    """
+    # Startup logic
+    print("INFO: Application startup via lifespan event.")
+    
+    # Schedule the daily job to clear interactions
+    # User updated default to 10:00 UTC (3:00 AM PDT)
+    clear_hour_env = os.getenv("CLEAR_INTERACTIONS_HOUR", "10") 
+    clear_minute_env = os.getenv("CLEAR_INTERACTIONS_MINUTE", "0")
+    try:
+        clear_hour = int(clear_hour_env)
+        clear_minute = int(clear_minute_env)
+        if not (0 <= clear_hour <= 23 and 0 <= clear_minute <= 59):
+            raise ValueError("Hour/minute out of range")
+    except ValueError:
+        print(f"WARN: Invalid CLEAR_INTERACTIONS_HOUR ('{clear_hour_env}') or CLEAR_INTERACTIONS_MINUTE ('{clear_minute_env}'). Defaulting to 10:00 UTC.")
+        clear_hour = 10 # Default hour if env var is invalid
+        clear_minute = 0  # Default minute
+
+    scheduler.add_job(
+        clear_all_interactions_job,
+        trigger='cron',
+        hour=clear_hour,
+        minute=clear_minute,
+        id="clear_interactions_daily_job", # Unique ID for the job
+        name="Daily clear all interactions.json files from S3",
+        replace_existing=True # Replace if a job with the same ID already exists
+    )
+    
+    if not scheduler.running:
+        scheduler.start()
+        print(f"INFO: APScheduler started via lifespan. 'clear_all_interactions_job' scheduled daily at {clear_hour:02}:{clear_minute:02} UTC.")
+    else:
+        # This case might occur if the scheduler was somehow started externally or in a complex setup.
+        # Typically, with lifespan, it starts here.
+        print(f"INFO: APScheduler already running. 'clear_all_interactions_job' remains scheduled daily at {clear_hour:02}:{clear_minute:02} UTC.")
+
+    yield # FastAPI runs after this yield, until shutdown
+
+    # Shutdown logic
+    print("INFO: Application shutdown via lifespan event.")
+    if scheduler.running:
+        scheduler.shutdown(wait=True) # wait=True is good practice for graceful shutdown
+        print("INFO: APScheduler shutdown gracefully via lifespan.")
 
 # --- FastAPI App Setup ---
 app = FastAPI(
     title="Video Q&A AI Agent API",
     description="API for processing videos and answering questions using RAG+MCP.",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan # Pass the lifespan async context manager
 )
 
 # --- CORS Configuration ---

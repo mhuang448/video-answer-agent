@@ -16,6 +16,7 @@ This document describes the Python backend service for the Video Answer Agent pr
 - **State Management via S3:** Uses AWS S3 to store:
   - Video metadata (`<video_id>.json`): Contains processing status, summary, themes, etc.
   - User interactions (`interactions.json`): A list containing each question (`user_query`), status (`processing`, `completed`, `failed`), the AI answer (`ai_answer`), timestamps, and `user_name`. Stored separately to avoid conflicts during simultaneous updates.
+- **Automated Daily Cleanup:** Includes a scheduled daily job (using `apscheduler`) to automatically delete all `interactions.json` files from S3. This helps manage storage and keep the system tidy. The job's execution time and concurrency are configurable via environment variables.
 
 ## 2. Architecture & External Services
 
@@ -26,7 +27,7 @@ This document describes the Python backend service for the Video Answer Agent pr
 The backend relies on several external services and components:
 
 1.  **AWS S3:**
-    - **Storage:** Stores video metadata (`.json`) and interaction data (`.json`) under the `video-data/<video_id>/` prefix. _Note: Actual video file (.mp4) storage/processing is handled separately or assumed pre-existing for the scope of this backend API._
+    - **Storage:** Stores video metadata (`.json`) and interaction data (`.json`) under the `video-data/<video_id>/` prefix. _Note: Actual video file (.mp4) storage/processing is handled separately or assumed pre-existing for the scope of this backend API._ Interaction data (`interactions.json`) is subject to automated daily cleanup.
     - **State:** Acts as the primary data store for tracking video processing status and Q&A interactions.
 2.  **Pinecone:**
     - **Vector Database:** Stores embeddings of video captions/chunks.
@@ -153,6 +154,9 @@ The backend relies heavily on environment variables for configuration. Use a `.e
 - `OPENAI_EMBEDDING_MODEL`: OpenAI model for embeddings (defaults to `text-embedding-ada-002`).
 - `OPENAI_SYNTHESIS_MODEL`: OpenAI model for answer synthesis (defaults to `gpt-4o-mini`).
 - `ANTHROPIC_TOOL_SELECTION_MODEL`: Anthropic model for MCP tool selection (defaults to `claude-3-7-sonnet-20250219`).
+- `CLEAR_INTERACTIONS_HOUR`: The UTC hour (0-23) when the daily `interactions.json` cleanup job should run (defaults to `10`, which is 3 AM PDT).
+- `CLEAR_INTERACTIONS_MINUTE`: The UTC minute (0-59) when the daily `interactions.json` cleanup job should run (defaults to `0`).
+- `CLEAR_INTERACTIONS_MAX_WORKERS`: The number of concurrent workers for the `interactions.json` cleanup job (defaults to `5`).
 
 ## 7 Running and developing locally
 
@@ -226,5 +230,4 @@ from `/backend` directory, run `uvicorn app.main:app --reload`
 - `httpx`, `httpx-sse`: Asynchronous HTTP client libraries (required by `fastmcp` for SSE).
 - `anthropic`: Official Anthropic Python client library (for Claude tool selection).
 - `python-dotenv`: Loads `.env` files for local development.
-- `google-genai`: Google AI client library (likely intended for captioning, though captioning logic is currently a placeholder).
-- _(Placeholder-related):_ `yt_dlp`, `moviepy`, `TikTokApi`, `scenedetect`, `opencv-python` are listed but the corresponding logic in `pipeline_logic.py` is not active.
+- `apscheduler`: For scheduling background tasks, such as the daily cleanup of interaction files.

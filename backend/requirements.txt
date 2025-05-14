@@ -13,8 +13,9 @@ scenedetect
 opencv-python
 
 google-genai
-pinecone[grpc]
 openai
+
+pinecone[grpc]
 
 mcp
 fastmcp
@@ -22,3 +23,5 @@ fastmcp
 httpx
 httpx-sse
 anthropic
+
+apscheduler
