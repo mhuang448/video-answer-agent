@@ -214,7 +214,6 @@ Client-side state is managed primarily using standard React Hooks within individ
       BACKEND_API_URL=http://localhost:8000
       # Replace with your deployed backend URL if not running locally
       ```
-    - `NEXT_PUBLIC_` prefix makes the variable accessible in the browser-side code.
 4.  **Run the development server:**
     ```bash
     npm run dev

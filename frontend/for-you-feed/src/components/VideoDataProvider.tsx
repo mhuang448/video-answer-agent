@@ -6,22 +6,30 @@ import { VideoInfo } from "@/app/types";
  */
 const VideoDataProvider = {
   /**
-   * Fetches initial videos for the For You feed
-   * Uses the Next.js API route to get data from FastAPI backend
-   * No caching to ensure fresh random videos on every request
+   * Fetches initial videos for the For You feed.
+   * When called server-side (e.g., from a Server Component like page.tsx),
+   * this function directly calls the FastAPI backend.
+   * No caching to ensure fresh random videos on every request.
    */
   async getForYouVideos(): Promise<VideoInfo[]> {
-    try {
-      // Use the absolute URL of our Next.js API route
-      // In production, you'd use your deployed URL
-      const baseUrl =
-        process.env.NODE_ENV === "production"
-          ? process.env.NEXT_PUBLIC_FRONTEND_URL
-          : "http://localhost:3000";
+    const backendApiUrl = process.env.BACKEND_API_URL;
 
-      // Using cache: 'no-store' to ensure we get fresh videos on every request
-      const response = await fetch(`${baseUrl}/api/videos/foryou`, {
-        cache: "no-store", // Disable caching completely - get fresh data every time
+    if (!backendApiUrl) {
+      console.error(
+        "ERROR: BACKEND_API_URL is not set in the environment. " +
+          "VideoDataProvider cannot fetch videos directly from the backend."
+      );
+      // In a real-world scenario, you might throw an error or return a more specific error state.
+      return [];
+    }
+
+    try {
+      // Directly fetch from the FastAPI backend endpoint
+      const response = await fetch(`${backendApiUrl}/api/videos/foryou`, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store", // Ensure we're not caching the FastAPI response
       });
 
       if (!response.ok) {
