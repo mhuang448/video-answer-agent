@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from datetime import datetime
 import argparse # Added for command-line arguments
+from urllib.parse import urlparse, urlunparse # Added for URL normalization
 
 # Third-Party Imports
 import yt_dlp
@@ -1394,7 +1395,28 @@ def main_pipeline(tiktok_url): # Changed to accept URL directly
     """Runs the main technical pipeline for a given TikTok URL."""
     pipeline_start_time = time.monotonic()
     print("--- Starting Technical Pipeline ---")
-    print(f"Processing URL: {tiktok_url}")
+    print(f"Original Input URL: {tiktok_url}")
+
+    # Normalize the TikTok URL to remove query parameters and fragments
+    try:
+        parsed_url = urlparse(tiktok_url)
+        # Keep only scheme, netloc, and path. Clear query, params, fragment.
+        normalized_url = urlunparse((
+            parsed_url.scheme,
+            parsed_url.netloc,
+            parsed_url.path,
+            '', # params
+            '', # query
+            ''  # fragment
+        ))
+        # Ensure no trailing slash if the original path didn't have one and it wasn't just the domain
+        if not tiktok_url.endswith('/') and parsed_url.path and parsed_url.path != '/':
+            normalized_url = normalized_url.rstrip('/')
+        
+        print(f"Normalized URL for Processing: {normalized_url}")
+        tiktok_url = normalized_url # Use the normalized URL for the rest of the pipeline
+    except Exception as e:
+        print(f"Warning: Could not parse or normalize input URL '{tiktok_url}'. Error: {e}. Proceeding with original.")
 
     # Define base path for downloads relative to the script location
     script_dir = os.path.dirname(__file__) if "__file__" in locals() else os.getcwd() # Handle interactive use

@@ -53,10 +53,10 @@ Before running this pipeline, ensure the following components are available and 
 Run the pipeline from your terminal, providing the target TikTok video URL as a command-line argument:
 
 ```bash
-python data_processing/process_video_pipeline.py "FULL_TIKTOK_VIDEO_URL"
+python video_processing_pipeline/process_video_pipeline.py "FULL_TIKTOK_VIDEO_URL"
 ```
 
-Replace `FULL_TIKTOK_VIDEO_URL` with the actual URL in the standard TikTok format `tiktok.com/@<user_name>/video/<tiktok_id>` (e.g. `tiktok.com/@ridergpt/video/7410486865842703659`). The script logs its progress through each stage to the console.
+Replace `FULL_TIKTOK_VIDEO_URL` with the actual URL in the standard TikTok format `tiktok.com/@<user_name>/video/<tiktok_id>` (e.g. `tiktok.com/@ridergpt/video/7410486865842703659`). The script logs its progress through each stage to the console. Surround the URL in quotes if there are extra parameters trailing the standard format (e.g. `"tiktok.com/@<user_name>/video/<tiktok_id>?lang=en"`)
 
 ## 5. Pipeline Stages Breakdown
 
